@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_library(kafkax
-        src/kafkax.cpp
+        src/adpaters/q/kafkax_q.cpp
         src/core/subscribe.cpp
         src/core/decoder_registry.cpp
         src/runtime/decode_worker.cpp
