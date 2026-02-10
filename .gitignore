@@ -1,0 +1,97 @@
+#----------------------------------------
+# Common
+#----------------------------------------
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Ignore by editor
+.vscode/
+.idea/
+*.code-workspace
+
+# Ignore by OS
+ehthumbs.db
+Icon?
+Desktop.ini
+
+#----------------------------------------
+# kdb+/q
+#----------------------------------------
+# q binaries or build artifacts
+q.k
+q.o
+qlog/
+*.so
+*.dll
+*.qpc
+# temp splayed/hdb files
+db/
+*.kdb
+sym
+hdb/
+tick/
+.qpc/
+samples/
+test_tick/
+FUTUHDB/
+
+#----------------------------------------
+# Python
+#----------------------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+.cache/
+*.sqlite3
+.env
+.venv/
+venv/
+pip-wheel-metadata/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Mypy / Pyright / Pylint / coverage
+.mypy_cache/
+.pyright/
+.pytest_cache/
+.coverage
+htmlcov/
+
+#----------------------------------------
+# C/C++
+#----------------------------------------
+*.o
+*.obj
+*.out
+*.exe
+*.dll
+*.so
+*.a
+*.lib
+*.lo
+*.la
+
+# Build folders
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+Makefile
+compile_commands.json
+CTestTestfile.cmake
+Testing
+third_party/
+_stage/
