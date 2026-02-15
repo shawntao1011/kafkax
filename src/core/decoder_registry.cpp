@@ -16,9 +16,11 @@ kafkax::DecoderRegistry::~DecoderRegistry() {
     }
 }
 
-int kafkax::DecoderRegistry::load_decoder(const std::string& so_path,
-                                   std::unique_ptr<DecoderEntry>& out,
-                                   std::string& err) {
+int kafkax::DecoderRegistry::load_decoder(
+    const std::string& so_path,
+    const std::string& symbol,
+    std::unique_ptr<DecoderEntry>& out,
+    std::string& err) {
     void* handle = dlopen(so_path.c_str(), RTLD_NOW);
     if (!handle) {
         err = dlerror();
@@ -43,10 +45,10 @@ int kafkax::DecoderRegistry::load_decoder(const std::string& so_path,
     }
 
     auto fn = (kafkax_decode_fn)
-        dlsym(handle, "kafkax_decode");
+        dlsym(handle, symbol.c_str());
 
     if (!fn) {
-        err = "symbol kafkax_decode not found";
+        err = "symbol " + symbol + " not found";
         dlclose(handle);
         return -4;
     }
@@ -55,6 +57,7 @@ int kafkax::DecoderRegistry::load_decoder(const std::string& so_path,
     out->handle = handle;
     out->fn = fn;
     out->so_path = so_path;
+    out->symbol = symbol;
 
     return 0;
 }
@@ -72,7 +75,7 @@ int kafkax::DecoderRegistry::bind(const std::string& topic,
     }
 
     std::unique_ptr<DecoderEntry> entry;
-    int rc = load_decoder(so_path, entry, err);
+    int rc = load_decoder(so_path, symbol, entry, err);
     if (rc != 0) return rc;
 
     topic_map_[topic] = std::move(entry);
@@ -94,7 +97,7 @@ int kafkax::DecoderRegistry::rebind(const std::string& topic,
     }
 
     std::unique_ptr<DecoderEntry> entry;
-    int rc = load_decoder(so_path, entry, err);
+    int rc = load_decoder(so_path, symbol,entry, err);
     if (rc != 0) return rc;
 
     topic_map_[topic] = std::move(entry);

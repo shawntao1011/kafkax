@@ -67,6 +67,7 @@ namespace kafkax {
         std::unordered_map<std::string, std::unique_ptr<DecoderEntry>> topic_map_;
 
         int load_decoder(const std::string& so_path,
+                         const std::string& symbol,
                          std::unique_ptr<DecoderEntry>& out,
                          std::string& err);
     };

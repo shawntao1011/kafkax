@@ -293,7 +293,6 @@ namespace kafkax {
     }
 
     void Core::maybe_pause() {
-
         if (paused_.load())
             return;
 
@@ -315,7 +314,6 @@ namespace kafkax {
 
 
     void Core::maybe_resume() {
-
         if (!paused_.load())
             return;
 
@@ -332,6 +330,33 @@ namespace kafkax {
                 assignment_);
             paused_.store(false);
         }
+    }
+
+    int Core::bind_topic(const std::string& topic,
+                     const std::string& so_path,
+                     const std::string& symbol,
+                     std::string& err)
+    {
+        return registry_.bind(topic, so_path, symbol, err);
+    }
+
+    int Core::rebind_topic(const std::string& topic,
+                           const std::string& so_path,
+                           const std::string& symbol,
+                           std::string& err)
+    {
+        return registry_.rebind(topic, so_path, symbol, err);
+    }
+
+    int Core::unbind_topic(const std::string& topic)
+    {
+        return registry_.unbind(topic);
+    }
+
+    bool Core::get_topic_decoder(const std::string& topic,
+                                 DecoderRegistry::BindingInfo& out) const
+    {
+        return registry_.get_decoder_info(topic, out);
     }
 
     void Core::drainTo(std::vector<Event>& out) {
@@ -356,7 +381,8 @@ namespace kafkax {
         }
     }
 
-    std::size_t Core::next_worker(const Envelope&) {
+    std::size_t Core::next_worker(const Envelope&)
+    {
         return rr_.fetch_add(1) % cfg_.decode_threads;
     }
 
