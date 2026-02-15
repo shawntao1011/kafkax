@@ -35,7 +35,7 @@ add_subdirectory(plugins/default_decoder)
 # q adapter (optional)
 if(KAFKAX_BUILD_Q)
     add_library(kafkax_q SHARED
-            src/adpaters/q/kafkax_q.cpp
+            src/adpaters/kafkax_q.cpp
     )
     target_include_directories(kafkax_q
             PRIVATE
@@ -44,7 +44,3 @@ if(KAFKAX_BUILD_Q)
     )
     target_link_libraries(kafkax_q PRIVATE kafkax_core)
 endif()
-
-add_executable(cpp_kafka_demo examples/cpp_kafka_demo.cpp)
-target_include_directories(cpp_kafka_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(cpp_kafka_demo PRIVATE kafkax_core)
