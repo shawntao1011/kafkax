@@ -1,0 +1,4 @@
+#pragma once
+#define KAFKAX_VERSION_MAJOR 0
+#define KAFKAX_VERSION_MINOR 1
+#define KAFKAX_VERSION_PATCH 0
