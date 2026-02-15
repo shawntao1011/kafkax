@@ -5,7 +5,7 @@
 #include <thread>
 #include <vector>
 
-#include "core/core.hpp"
+#include "kafkax/core.hpp"
 
 namespace {
 
@@ -59,11 +59,11 @@ void print_event(const kafkax::Event& ev) {
     }
 
     std::cout << "[DATA] topic=" << ev.topic
-              << " len=" << ev.data.size();
+              << " len=" << ev.bytes.size();
 
-    if (!ev.data.empty()) {
+    if (!ev.bytes.empty()) {
         std::cout << " payload="
-                  << std::string(ev.data.begin(), ev.data.end());
+                  << std::string(ev.bytes.begin(), ev.bytes.end());
     }
 
     std::cout << std::endl;

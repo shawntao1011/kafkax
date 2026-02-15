@@ -1,4 +1,4 @@
-#include "kafkax/decoder.h"
+#include "../../include/decoder.h"
 
 int kafkax_decoder_abi_version() {
     return KAFKAX_DECODER_ABI_VERSION;

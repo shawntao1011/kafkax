@@ -1,4 +1,4 @@
-#include "core.hpp"
+#include "../../include/kafkax/core.hpp"
 
 #include <cstring>
 
@@ -316,6 +316,8 @@ namespace kafkax {
             auto ev = std::make_unique<Event>();
 
             ev->topic = raw->env.topic;
+            ev->key = raw->env.key;
+            ev->ingest_ns = raw->env.ingest_ns;
 
             kafkax_decode_result_t result{};
             kafkax_envelope_t cenv{};
@@ -342,7 +344,7 @@ namespace kafkax {
                         sizeof(ev->err_msg));
                 } else {
                     ev->kind = Event::Kind::Data;
-                    ev->data.assign(
+                    ev->bytes.assign(
                         result.bytes,
                         result.bytes + result.len);
                 }

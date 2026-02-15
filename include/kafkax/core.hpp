@@ -7,7 +7,9 @@
 
 #include <librdkafka/rdkafka.h>
 
-#include "decoder_registry.hpp"
+#include "event.h"
+#include "kafkax/decoder_registry.hpp"
+#include "kafkax/core.hpp"
 
 namespace kafkax {
 
@@ -47,24 +49,6 @@ namespace kafkax {
         std::vector<std::uint8_t> key;
         std::vector<std::uint8_t> payload;
         std::int64_t ingest_ns{0};
-    };
-
-    /* --------------------------
-     * Output event (core result)
-     * -------------------------- */
-    struct Event {
-        enum class Kind : std::uint8_t {
-            Data  = 0,
-            Error = 1
-        };
-
-        Kind kind{Kind::Data};
-
-        std::string topic;
-        std::int64_t ingest_ns{0};
-
-        std::vector<std::uint8_t> data;   // when Kind::Data
-        char err_msg[96]{0};              // when Kind::Error
     };
 
     class Core {

@@ -12,8 +12,8 @@ pkg_check_modules(RDKAFKA   REQUIRED IMPORTED_TARGET rdkafka)
 option(KAFKAX_BUILD_Q "Build q adapter (requires k.h)" OFF)
 
 add_library(kafkax_core SHARED
-        src/core/core.cpp
-        src/core/decoder_registry.cpp
+        src/kafkax/core.cpp
+        src/kafkax/decoder_registry.cpp
 )
 
 target_include_directories(kafkax_core
@@ -32,15 +32,14 @@ endif()
 # Plugin: default decoder
 add_subdirectory(plugins/default_decoder)
 
-# q adapter (optional)
-if(KAFKAX_BUILD_Q)
-    add_library(kafkax_q SHARED
-            src/adpaters/kafkax_q.cpp
+# header-only dependency: kx/k.h
+add_library(kx_kdb INTERFACE)
+add_library(kx::kdb ALIAS kx_kdb)
+
+add_library(kafkax_q SHARED
+        kafkax.cpp
     )
-    target_include_directories(kafkax_q
-            PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/include
-            $ENV{QHOME}/c
+target_include_directories(kafkax_q PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
-    target_link_libraries(kafkax_q PRIVATE kafkax_core)
-endif()
+target_link_libraries(kafkax_q PRIVATE kafkax_core)
