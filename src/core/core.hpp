@@ -125,7 +125,6 @@ namespace kafkax {
         void decode_loop(std::size_t worker_id);
 
         void maybe_pause();
-        void maybe_resume();
 
         std::size_t next_worker(const Envelope& env);
 
@@ -141,21 +140,30 @@ namespace kafkax {
         std::thread consumer_th_;
         std::vector<std::thread> workers_;
 
+        /* Queues */
         std::vector<std::unique_ptr<detail::SPSCRing<std::unique_ptr<RawMsg>>>> raw_qs_;
-        std::vector<std::unique_ptr<detail::SPSCRing<std::unique_ptr<Event>>>>   evt_qs_;
+        std::vector<std::unique_ptr<detail::SPSCRing<std::unique_ptr<Event>>>> evt_qs_;
 
-        DecoderRegistry registry_;
+        /* Epochs for atomic_wait */
+        std::vector<std::unique_ptr<std::atomic<std::uint64_t>>> raw_epochs_;
+        std::vector<std::unique_ptr<std::atomic<std::uint64_t>>> evt_epochs_;
 
-        std::atomic<bool> paused_{false};
+        /* Global counters for watermarks */
+        std::atomic<std::size_t> total_raw_{0};
 
         std::size_t high_watermark_;
         std::size_t low_watermark_;
+
+        std::atomic<bool> paused_{false};
+        std::atomic<bool> resume_requested_{false};
 
         std::atomic<std::size_t> rr_{0};
         std::atomic<std::size_t> drain_rr_{0};
 
         mutable std::mutex assign_mu_;
         rd_kafka_topic_partition_list_t* assignment_{nullptr};
+
+        DecoderRegistry registry_;
     };
 
 } // namespace kafkax

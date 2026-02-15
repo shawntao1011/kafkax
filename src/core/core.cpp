@@ -55,6 +55,10 @@ namespace kafkax {
 
     } // namespace detail
 
+
+    /* ============================================================
+     * ======================  Core  ===============================
+     * ============================================================ */
     Core::Core(const Config& cfg)
     : cfg_(cfg) {
 
@@ -74,15 +78,24 @@ namespace kafkax {
                void* opaque) {
 
                 auto* self = static_cast<Core*>(opaque);
-
                 std::lock_guard<std::mutex> lk(self->assign_mu_);
 
                 if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
                     rd_kafka_assign(rk, partitions);
+
+                    if (self->assignment_)
+                        rd_kafka_topic_partition_list_destroy(self->assignment_);
+
                     self->assignment_ =
                         rd_kafka_topic_partition_list_copy(partitions);
-                } else {
+                }
+                else {
                     rd_kafka_assign(rk, nullptr);
+
+                    if (self->assignment_) {
+                        rd_kafka_topic_partition_list_destroy(self->assignment_);
+                        self->assignment_ = nullptr;
+                    }
                 }
             });
 
@@ -92,6 +105,10 @@ namespace kafkax {
     Core::~Core() {
         stop();
     }
+
+    /* ============================================================
+     * ======================  Kafka Config =======================
+     * ============================================================ */
 
     int Core::set_conf(const std::string& key,
                    const std::string& value,
@@ -112,8 +129,8 @@ namespace kafkax {
 
 
     int Core::subscribe(const std::vector<std::string>& topics,
-                        std::string& err) {
-
+                        std::string& err)
+    {
         rk_ = rd_kafka_new(RD_KAFKA_CONSUMER,
                            conf_,
                            nullptr,
@@ -147,10 +164,11 @@ namespace kafkax {
         return 0;
     }
 
-    void Core::start() {
-
+    void Core::start()
+    {
         raw_qs_.resize(cfg_.decode_threads);
         evt_qs_.resize(cfg_.decode_threads);
+        raw_epochs_.resize(cfg_.decode_threads);
 
         for (std::size_t i = 0; i < cfg_.decode_threads; ++i) {
             raw_qs_[i] = std::make_unique<
@@ -160,6 +178,9 @@ namespace kafkax {
             evt_qs_[i] = std::make_unique<
                 detail::SPSCRing<std::unique_ptr<Event>>>(
                 cfg_.evt_queue_size);
+
+            raw_epochs_[i] =
+                std::make_unique<std::atomic<uint64_t>>(0);
 
             workers_.emplace_back(
                 &Core::decode_loop,
@@ -171,9 +192,14 @@ namespace kafkax {
             std::thread(&Core::consumer_loop, this);
     }
 
-    void Core::stop() {
+    void Core::stop()
+    {
+        stop_.store(true, std::memory_order_release);
 
-        stop_.store(true);
+        for (auto& e : raw_epochs_) {
+            e->fetch_add(1);
+            std::atomic_notify_all(e.get());
+        }
 
         if (consumer_th_.joinable())
             consumer_th_.join();
@@ -186,17 +212,34 @@ namespace kafkax {
             rd_kafka_consumer_close(rk_);
             rd_kafka_destroy(rk_);
         }
+
+        if (assignment_) {
+            rd_kafka_topic_partition_list_destroy(assignment_);
+            assignment_ = nullptr;
+        }
     }
 
+    /* ============================================================
+     * ======================  Consumer Loop ======================
+     * ============================================================ */
     void Core::consumer_loop() {
 
-        while (!stop_.load()) {
+        while (!stop_.load(std::memory_order_acquire)) {
 
-            auto* msg =
-                rd_kafka_consumer_poll(rk_, 100);
+            /* Resume requested */
+            if (paused_.load(std::memory_order_acquire) &&
+                resume_requested_.exchange(false))
+            {
+                std::lock_guard<std::mutex> lk(assign_mu_);
+                if (assignment_) {
+                    rd_kafka_resume_partitions(rk_, assignment_);
+                    paused_.store(false, std::memory_order_release);
+                }
+            }
 
-            if (!msg)
-                continue;
+            auto* msg = rd_kafka_consumer_poll(rk_, 100);
+
+            if (!msg) continue;
 
             if (msg->err) {
                 rd_kafka_message_destroy(msg);
@@ -204,67 +247,84 @@ namespace kafkax {
             }
 
             Envelope env;
-            env.topic =
-                rd_kafka_topic_name(msg->rkt);
+            env.topic = rd_kafka_topic_name(msg->rkt);
 
             env.payload.assign(
                 (uint8_t*)msg->payload,
                 (uint8_t*)msg->payload + msg->len);
 
-            auto raw =
-                std::make_unique<RawMsg>();
+            auto raw = std::make_unique<RawMsg>();
             raw->env = std::move(env);
 
-            auto w =
-                next_worker(raw->env);
+            auto worker = next_worker(raw->env);
 
-            while (!raw_qs_[w]->try_push(std::move(raw))) {
+            /* Backpressure push (blocking) */
+            while (!raw_qs_[worker]->try_push(std::move(raw))) {
+
                 maybe_pause();
-                std::this_thread::sleep_for(
-                    std::chrono::microseconds(50));
+
+                auto& epoch = *raw_epochs_[worker];
+                auto seen = epoch.load();
+                std::atomic_wait(&epoch, seen);
+
+                if (stop_.load())
+                    break;
             }
 
+            auto& epoch = *raw_epochs_[worker];
+            epoch.fetch_add(1);
+            std::atomic_notify_one(&epoch);
+
+            total_raw_.fetch_add(1);
             rd_kafka_message_destroy(msg);
+
             maybe_pause();
         }
     }
 
-    void Core::decode_loop(std::size_t id) {
-
+    /* ============================================================
+     * ======================  Decode Loop ========================
+     * ============================================================ */
+    void Core::decode_loop(std::size_t id)
+    {
         auto& rq = *raw_qs_[id];
         auto& eq = *evt_qs_[id];
+        auto& epoch = *raw_epochs_[id];
 
-        while (!stop_.load()) {
+        while (!stop_.load(std::memory_order_acquire)) {
 
             std::unique_ptr<RawMsg> raw;
 
             if (!rq.try_pop(raw)) {
-                std::this_thread::yield();
+                auto seen = epoch.load();
+                std::atomic_wait(&epoch, seen);
                 continue;
             }
 
-            maybe_resume();
+            epoch.fetch_add(1);
+            std::atomic_notify_one(&epoch);
 
-            auto ev =
-                std::make_unique<Event>();
+            total_raw_.fetch_sub(1, std::memory_order_relaxed);
 
-            ev->topic =
-                raw->env.topic;
+            /* If below low watermark → request resume */
+            if (paused_.load(std::memory_order_acquire) &&
+                total_raw_.load(std::memory_order_relaxed) <= low_watermark_)
+            {
+                resume_requested_.store(true, std::memory_order_release);
+            }
+
+            auto ev = std::make_unique<Event>();
+
+            ev->topic = raw->env.topic;
 
             kafkax_decode_result_t result{};
             kafkax_envelope_t cenv{};
 
-            cenv.topic =
-                raw->env.topic.c_str();
+            cenv.topic = raw->env.topic.c_str();
+            cenv.payload = raw->env.payload.data();
+            cenv.payload_len = raw->env.payload.size();
 
-            cenv.payload =
-                raw->env.payload.data();
-
-            cenv.payload_len =
-                raw->env.payload.size();
-
-            auto fn =
-                registry_.get_fn(raw->env.topic);
+            auto fn = registry_.get_fn(raw->env.topic);
 
             if (!fn) {
                 ev->kind = Event::Kind::Error;
@@ -288,49 +348,34 @@ namespace kafkax {
                 }
             }
 
-            eq.try_push(std::move(ev));
-        }
-    }
-
-    void Core::maybe_pause() {
-        if (paused_.load())
-            return;
-
-        for (auto& q : raw_qs_) {
-            if (q->size() >= high_watermark_) {
-
-                std::lock_guard<std::mutex> lk(assign_mu_);
-
-                if (assignment_) {
-                    rd_kafka_pause_partitions(
-                        rk_,
-                        assignment_);
-                    paused_.store(true);
-                }
-                break;
+            /* Blocking event push */
+            while (!eq.try_push(std::move(ev))) {
+                std::this_thread::yield();
+                if (stop_.load())
+                    break;
             }
         }
     }
 
-
-    void Core::maybe_resume() {
-        if (!paused_.load())
+    void Core::maybe_pause() {
+        if (paused_.load(std::memory_order_acquire))
             return;
 
-        for (auto& q : raw_qs_) {
-            if (q->size() > low_watermark_)
-                return;
-        }
+        if (total_raw_.load(std::memory_order_relaxed) < high_watermark_)
+            return;
 
         std::lock_guard<std::mutex> lk(assign_mu_);
 
-        if (assignment_) {
-            rd_kafka_resume_partitions(
-                rk_,
-                assignment_);
-            paused_.store(false);
-        }
+        if (!assignment_)
+            return;
+
+        rd_kafka_pause_partitions(rk_, assignment_);
+        paused_.store(true, std::memory_order_release);
     }
+
+    /* ============================================================
+     * ======================  Control Plane ======================
+     * ============================================================ */
 
     int Core::bind_topic(const std::string& topic,
                      const std::string& so_path,
@@ -359,19 +404,21 @@ namespace kafkax {
         return registry_.get_decoder_info(topic, out);
     }
 
+    /* ============================================================
+     * ======================  Drain ==============================
+     * ============================================================ */
+
     void Core::drainTo(std::vector<Event>& out) {
 
         if (evt_qs_.empty())
             return;
 
         auto qn = evt_qs_.size();
-        auto start =
-            drain_rr_.fetch_add(1) % qn;
+        auto start = drain_rr_.fetch_add(1) % qn;
 
-        for (std::size_t i = 0; i < qn; ++i) {
-
-            auto idx =
-                (start + i) % qn;
+        for (std::size_t i = 0; i < qn; ++i)
+        {
+            auto idx = (start + i) % qn;
 
             std::unique_ptr<Event> ev;
 
