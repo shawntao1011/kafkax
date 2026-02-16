@@ -3,13 +3,15 @@
 #include <cstring>
 
 namespace kafkax {
+    inline const char* bool_to_str(bool b) {
+        return b ? "true" : "false";
+    }
 
     namespace detail {
         template <class T>
         SPSCRing<T>::SPSCRing(std::size_t cap)
-            : cap_(cap),
-              mask_(capacity() - 1),
-              buf_(static_cast<T*>(::operator new[](sizeof(T) *cap))) {}
+            : cap_(cap == 0 ? 1 : cap),
+              buf_(static_cast<T*>(::operator new[](sizeof(T) * cap_))) {}
 
         template <class T>
         SPSCRing<T>::~SPSCRing() {
@@ -25,7 +27,7 @@ namespace kafkax {
 
             if ((t - h) >= cap_) return false;
 
-            new (&buf_[t & mask_]) T(std::move(v));
+            new (&buf_[t % cap_]) T(std::move(v));
             tail_.store(t + 1, std::memory_order_release);
             return true;
         }
@@ -37,7 +39,7 @@ namespace kafkax {
 
             if (h == t) return false;
 
-            T* slot = &buf_[h & mask_];
+            T* slot = &buf_[h % cap_];
             out = std::move(*slot);
             slot->~T();
 
@@ -59,7 +61,7 @@ namespace kafkax {
     /* ============================================================
      * ======================  Core  ===============================
      * ============================================================ */
-    Core::Core(const Config& cfg)
+    Core::Core(const DecodeConfig& cfg)
     : cfg_(cfg) {
 
         high_watermark_ =
@@ -102,6 +104,15 @@ namespace kafkax {
         rd_kafka_conf_set_opaque(conf_, this);
     }
 
+    Core::Core(const DecodeConfig& cfg, const KafkaConfig& kafka_cfg, std::string& err)
+        : Core(cfg)
+    {
+        if (apply_kafka_config(kafka_cfg, err) != 0) {
+            kafka_conf_ok_ = false;
+            kafka_conf_err_ = err;
+        }
+    }
+
     Core::~Core() {
         stop();
     }
@@ -127,10 +138,47 @@ namespace kafkax {
         return 0;
     }
 
+    int Core::apply_kafka_config(const KafkaConfig& kafka_cfg, std::string& err)
+    {
+        if (!kafka_cfg.bootstrap_servers.empty() &&
+            set_conf("bootstrap.servers", kafka_cfg.bootstrap_servers, err) != 0)
+        {
+            return -1;
+        }
+
+        if (!kafka_cfg.group_id.empty() &&
+            set_conf("group.id", kafka_cfg.group_id, err) != 0)
+        {
+            return -1;
+        }
+
+        if (!kafka_cfg.auto_offset_reset.empty() &&
+            set_conf("auto.offset.reset", kafka_cfg.auto_offset_reset, err) != 0)
+        {
+            return -1;
+        }
+
+        if (set_conf("enable.auto.commit", bool_to_str(kafka_cfg.enable_auto_commit), err) != 0) {
+            return -1;
+        }
+
+        for (const auto& [key, value] : kafka_cfg.extra) {
+            if (set_conf(key, value, err) != 0) {
+                return -1;
+            }
+        }
+
+        return 0;
+    }
 
     int Core::subscribe(const std::vector<std::string>& topics,
                         std::string& err)
     {
+        if (!kafka_conf_ok_) {
+            err = kafka_conf_err_;
+            return -1;
+        }
+
         rk_ = rd_kafka_new(RD_KAFKA_CONSUMER,
                            conf_,
                            nullptr,

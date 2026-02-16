@@ -17,7 +17,7 @@ namespace kafkax {
         template <class T>
         class SPSCRing {
         public:
-            explicit SPSCRing(std::size_t capacity_pow2);
+            explicit SPSCRing(std::size_t capacity);
 
             ~SPSCRing();
 
@@ -32,7 +32,6 @@ namespace kafkax {
 
         private:
             const std::size_t cap_;
-            const std::size_t mask_;
             T* buf_{nullptr};
 
             alignas(64) std::atomic<std::uint64_t> head_{0}; // consumer
@@ -53,10 +52,19 @@ namespace kafkax {
 
     class Core {
     public:
-        struct Config {
+        struct KafkaConfig {
+            std::string bootstrap_servers{};
+            std::string group_id{};
+            bool enable_auto_commit{true};
+            std::string auto_offset_reset{"earliest"};
+
+            std::unordered_map<std::string, std::string> extra{};
+        };
+
+        struct DecodeConfig {
             std::size_t decode_threads{4};
-            std::size_t raw_queue_size{8192};  // power-of-two
-            std::size_t evt_queue_size{8192};  // power-of-two
+            std::size_t raw_queue_size{8192};
+            std::size_t evt_queue_size{8192};
 
             double high_watermark_ratio{0.9};
             double low_watermark_ratio{0.5};
@@ -68,7 +76,8 @@ namespace kafkax {
 
         using DrainFn = void(*)(void* user, const Event& ev);
 
-        explicit Core(const Config& cfg);
+        explicit Core(const DecodeConfig& cfg);
+        Core(const DecodeConfig& cfg, const KafkaConfig& kafka_cfg, std::string& err);
         ~Core();
 
         Core(const Core&) = delete;
@@ -102,6 +111,8 @@ namespace kafkax {
         void drainTo(std::vector<Event>& out);
 
     private:
+        int apply_kafka_config(const KafkaConfig& kafka_cfg, std::string& err);
+
         void start();
         void stop();
 
@@ -113,11 +124,14 @@ namespace kafkax {
         std::size_t next_worker(const Envelope& env);
 
     private:
-        Config cfg_;
+        DecodeConfig cfg_;
 
         /* Kafka */
         rd_kafka_t* rk_{nullptr};
         rd_kafka_conf_t* conf_{nullptr};
+
+        bool kafka_conf_ok_{true};
+        std::string kafka_conf_err_;
 
         std::atomic<bool> stop_{false};
 
