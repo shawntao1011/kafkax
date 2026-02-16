@@ -29,9 +29,6 @@ if(UNIX AND NOT APPLE)
     )
 endif()
 
-# Plugin: default decoder
-add_subdirectory(plugins/default_decoder)
-
 # header-only dependency: kx/k.h
 add_library(kx_kdb INTERFACE)
 add_library(kx::kdb ALIAS kx_kdb)
@@ -43,3 +40,21 @@ target_include_directories(kafkax_q PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
 target_link_libraries(kafkax_q PRIVATE kafkax_core)
+
+
+add_library(kafkax_qipc STATIC
+        src/qipc/qipc_c.cpp
+)
+target_compile_features(kafkax_qipc PUBLIC cxx_std_20)
+target_include_directories(kafkax_qipc PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
+
+# Plugins
+add_subdirectory(plugins/default_decoder)
+
+# demos
+add_executable(kafkax_qipc_demo examples/qipc_usage_example.cpp)
+target_include_directories(kafkax_qipc_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(kafkax_qipc_demo PRIVATE kafkax_qipc)
