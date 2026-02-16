@@ -1,4 +1,4 @@
-#include "../../include/kafkax/decoder_registry.hpp"
+#include "kafkax/decoder_registry.hpp"
 #ifndef _WIN32
 #include <dlfcn.h>
 #else

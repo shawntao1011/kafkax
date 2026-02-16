@@ -1,4 +1,4 @@
-#include "../../include/kafkax/core.hpp"
+#include "kafkax/core.hpp"
 
 #include <cstring>
 
