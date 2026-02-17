@@ -4,12 +4,14 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
 
 #include <librdkafka/rdkafka.h>
 
 #include "event.h"
 #include "kafkax/decoder_registry.hpp"
-#include "kafkax/core.hpp"
 
 namespace kafkax {
 
@@ -108,7 +110,9 @@ namespace kafkax {
                                DecoderRegistry::BindingInfo& out) const;
 
         /* ----- data plane ----- */
-        void drainTo(std::vector<Event>& out);
+        void drainTo(std::vector<Event>& out, std::size_t limit = 4096);
+
+        int notify_fd() const noexcept { return efd_; }
 
     private:
         int apply_kafka_config(const KafkaConfig& kafka_cfg, std::string& err);
@@ -144,7 +148,6 @@ namespace kafkax {
 
         /* Epochs for atomic_wait */
         std::vector<std::unique_ptr<std::atomic<std::uint64_t>>> raw_epochs_;
-        std::vector<std::unique_ptr<std::atomic<std::uint64_t>>> evt_epochs_;
 
         /* Global counters for watermarks */
         std::atomic<std::size_t> total_raw_{0};
@@ -162,6 +165,9 @@ namespace kafkax {
         rd_kafka_topic_partition_list_t* assignment_{nullptr};
 
         DecoderRegistry registry_;
+
+        int efd_{-1};                                 // eventfd for sd1 wakeup
+        std::atomic<bool> evt_notified_{false};     // coalesce notify (armed flag)
     };
 
 } // namespace kafkax

@@ -4,7 +4,7 @@
 #include <string>
 #include <thread>
 #include <vector>
-
+#include <poll.h>
 #include "kafkax/core.hpp"
 
 namespace {
@@ -26,10 +26,8 @@ struct Stats {
 
     void on_event(const kafkax::Event& ev) {
         ++total;
-        if (ev.kind == kafkax::Event::Kind::Error)
-            ++error;
-        else
-            ++data;
+        if (ev.kind == kafkax::Event::Kind::Error) ++error;
+        else ++data;
     }
 
     void maybe_print() {
@@ -50,6 +48,17 @@ struct Stats {
         }
     }
 };
+
+static inline void drain_eventfd(int fd) {
+    // eventfd is NONBLOCK in Core; read until EAGAIN
+    std::uint64_t v;
+    for (;;) {
+        ssize_t n = ::read(fd, &v, sizeof(v));
+        if (n == (ssize_t)sizeof(v)) continue;
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+        break;
+    }
+}
 
 void print_event(const kafkax::Event& ev) {
     if (ev.kind == kafkax::Event::Kind::Error) {
@@ -106,27 +115,63 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    const int efd = core.notify_fd();
+    if (efd < 0) {
+        std::cerr << "notify_fd invalid: " << efd << std::endl;
+        return 1;
+    }
+
     std::cout << "kafkax drainTo demo started. topic=" << topic
               << " decoder=" << decoder_lib << ":" << decoder_fn
               << " (Ctrl+C to stop)" << std::endl;
 
     Stats stats;
 
+    pollfd pfd{};
+    pfd.fd = efd;
+    pfd.events = POLLIN;
+
+    constexpr std::size_t LIMIT = 4096;
+
     while (g_running) {
 
-        std::vector<kafkax::Event> out;
-        core.drainTo(out);
+        // Wait until efd readable (or timeout so we can print stats / respond to signal)
+        int rc = ::poll(&pfd, 1, 1000);
+        if (!g_running) break;
 
-        for (const auto& ev : out) {
-            stats.on_event(ev);
-
-            //print_event(ev);
+        if (rc < 0) {
+            if (errno == EINTR) continue; // interrupted by signal
+            std::perror("poll");
+            break;
         }
 
-        stats.maybe_print();
+        if (rc == 0) {
+            // timeout: no events, but we can still print stats
+            stats.maybe_print();
+            continue;
+        }
 
-        if (out.empty()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        // Clear eventfd readable state
+        drain_eventfd(efd);
+
+
+        // Drain batches; Core will re-notify if backlog remains
+        for (;;) {
+            std::vector<kafkax::Event> out;
+            out.reserve(LIMIT);
+
+            core.drainTo(out, LIMIT);
+            if (out.empty()) break;
+
+            for (const auto& ev : out) {
+                stats.on_event(ev);
+                // print_event(ev)
+            }
+
+            stats.maybe_print();
+
+            // If we hit LIMIT, likely backlog remains; loop again immediately.
+            if (out.size() < LIMIT) break;
         }
     }
 
@@ -136,6 +181,6 @@ int main(int argc, char** argv) {
               << " error=" << stats.error
               << std::endl;
 
-    std::cout << "kafkax drainTo demo stopped" << std::endl;
+    std::cout << "kafkax eventfd demo stopped" << std::endl;
     return 0;
 }

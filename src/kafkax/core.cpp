@@ -1,5 +1,7 @@
 #include "kafkax/core.hpp"
-
+#include <sys/eventfd.h>
+#include <unistd.h>
+#include <errno.h>
 #include <cstring>
 
 namespace kafkax {
@@ -180,15 +182,10 @@ namespace kafkax {
             return -1;
         }
 
-        rk_ = rd_kafka_new(RD_KAFKA_CONSUMER,
-                           conf_,
-                           nullptr,
-                           0);
-
-        if (!rk_) {
-            err = "rd_kafka_new failed";
-            return -1;
-        }
+        char ebuf[512];
+        rk_ = rd_kafka_new(RD_KAFKA_CONSUMER, conf_, ebuf, sizeof(ebuf));
+        if (!rk_) { err = ebuf; return -1; }
+        conf_ = nullptr;
 
         rd_kafka_poll_set_consumer(rk_);
 
@@ -215,6 +212,12 @@ namespace kafkax {
 
     void Core::start()
     {
+        efd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+        if (efd_ < 0) {
+            throw std::runtime_error("eventfd() failed");
+        }
+        evt_notified_.store(false, std::memory_order_release);
+
         raw_qs_.resize(cfg_.decode_threads);
         evt_qs_.resize(cfg_.decode_threads);
         raw_epochs_.resize(cfg_.decode_threads);
@@ -266,6 +269,11 @@ namespace kafkax {
             rd_kafka_topic_partition_list_destroy(assignment_);
             assignment_ = nullptr;
         }
+
+        if (efd_ >= 0) {
+            ::close(efd_);
+            efd_ = -1;
+        }
     }
 
     /* ============================================================
@@ -308,7 +316,10 @@ namespace kafkax {
             auto worker = next_worker(raw->env);
 
             /* Backpressure push (blocking) */
-            while (!raw_qs_[worker]->try_push(std::move(raw))) {
+            for (;;) {
+                auto tmp = std::move(raw);
+                if (raw_qs_[worker]->try_push(std::move(tmp))) break;
+                raw = std::move(tmp);  // push failed , retrieve msg
 
                 maybe_pause();
 
@@ -316,8 +327,7 @@ namespace kafkax {
                 auto seen = epoch.load();
                 std::atomic_wait(&epoch, seen);
 
-                if (stop_.load())
-                    break;
+                if (stop_.load()) break;
             }
 
             auto& epoch = *raw_epochs_[worker];
@@ -400,10 +410,19 @@ namespace kafkax {
             }
 
             /* Blocking event push */
-            while (!eq.try_push(std::move(ev))) {
+            for (;;) {
+                auto tmp = std::move(ev);
+                if (eq.try_push(std::move(tmp))) break;
+                ev = std::move(tmp);   // push failed, retrieve
+
                 std::this_thread::yield();
-                if (stop_.load())
-                    break;
+                if (stop_.load()) break;
+            }
+
+            bool expected = false;
+            if (evt_notified_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+                uint64_t one = 1;
+                (void)::write(efd_, &one, sizeof(one));
             }
         }
     }
@@ -459,7 +478,7 @@ namespace kafkax {
      * ======================  Drain ==============================
      * ============================================================ */
 
-    void Core::drainTo(std::vector<Event>& out) {
+    void Core::drainTo(std::vector<Event>& out, std::size_t limit) {
 
         if (evt_qs_.empty())
             return;
@@ -473,9 +492,26 @@ namespace kafkax {
 
             std::unique_ptr<Event> ev;
 
-            while (evt_qs_[idx]->try_pop(ev)) {
+            while (out.size() < limit && evt_qs_[idx]->try_pop(ev)) {
                 out.push_back(std::move(*ev));
             }
+            if (out.size() >= limit) break;
+        }
+
+        // check whether any evt_q still has data
+        bool any_left = false;
+        for (auto& q : evt_qs_) {
+            if (q && q->size() > 0) { any_left = true; break; }
+        }
+
+        if (!any_left) {
+            // all empty -> allow next notify from decode threads
+            evt_notified_.store(false, std::memory_order_release);
+        } else {
+            // still has data -> make eventfd readable again for next sd1 tick
+            // keep evt_notified_ = true (still armed)
+            uint64_t one = 1;
+            (void)::write(efd_, &one, sizeof(one));
         }
     }
 
