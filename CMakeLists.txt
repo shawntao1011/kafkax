@@ -9,19 +9,16 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(RDKAFKACPP REQUIRED IMPORTED_TARGET rdkafka++)
 pkg_check_modules(RDKAFKA   REQUIRED IMPORTED_TARGET rdkafka)
 
-option(KAFKAX_BUILD_Q "Build q adapter (requires k.h)" OFF)
 option(KAFKAX_BUILD_EXAMPLES "Build example subproject" ON)
 
-add_library(kafkax_core SHARED
+add_library(kafkax_core STATIC
         src/kafkax/core.cpp
         src/kafkax/decoder_registry.cpp
 )
-
 target_include_directories(kafkax_core
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
-
 if(UNIX AND NOT APPLE)
     target_link_libraries(kafkax_core
             PRIVATE

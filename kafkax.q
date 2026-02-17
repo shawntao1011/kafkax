@@ -4,7 +4,7 @@
 .kfkx.sub:      `libkafkax_q 2:(`kfkx_subscribe;2)
 .kfkx.drain:    `libkafkax_q 2:(`kfkx_drain;2)
 
-.kfk.i: 0;
+.kfkx.i: 0;
 .kfkx.upd:{[tbl;data]  / data is qipc bytes (KG vector)
  .kfkx.i+:1;
  }
@@ -25,6 +25,6 @@ cfg:(`bootstrap.servers`group.id`auto.offset.reset`enable.auto.commit`decode_thr
 
 h:.kfkx.consumer cfg;
 
-.kfkx.bind[h; `futu.orderbook.pb; "libkafkax_default_decoder.so"; `kafkax_default_decode];
+.kfkx.bind[h; `futu.orderbook.pb; "plugins/libkafkax_default_decoder.so"; `kafkax_default_decode];
 
 .kfkx.sub[h; `futu.orderbook.pb];
