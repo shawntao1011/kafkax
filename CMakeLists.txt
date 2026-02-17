@@ -55,6 +55,10 @@ target_include_directories(kafkax_qipc PUBLIC
 add_subdirectory(plugins/default_decoder)
 
 # demos
+add_executable(kafkax_consume_demo examples/cpp_kafka_demo.cpp)
+target_include_directories(kafkax_consume_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(kafkax_consume_demo PRIVATE kafkax_core)
+
 add_executable(kafkax_qipc_demo examples/qipc_usage_example.cpp)
 target_include_directories(kafkax_qipc_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(kafkax_qipc_demo PRIVATE kafkax_qipc)

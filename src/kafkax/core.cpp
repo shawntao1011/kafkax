@@ -104,9 +104,10 @@ namespace kafkax {
         rd_kafka_conf_set_opaque(conf_, this);
     }
 
-    Core::Core(const DecodeConfig& cfg, const KafkaConfig& kafka_cfg, std::string& err)
+    Core::Core(const DecodeConfig& cfg, const KafkaConfig& kafka_cfg)
         : Core(cfg)
     {
+        std::string err;
         if (apply_kafka_config(kafka_cfg, err) != 0) {
             kafka_conf_ok_ = false;
             kafka_conf_err_ = err;

@@ -77,7 +77,7 @@ namespace kafkax {
         using DrainFn = void(*)(void* user, const Event& ev);
 
         explicit Core(const DecodeConfig& cfg);
-        Core(const DecodeConfig& cfg, const KafkaConfig& kafka_cfg, std::string& err);
+        Core(const DecodeConfig& cfg, const KafkaConfig& kafka_cfg);
         ~Core();
 
         Core(const Core&) = delete;

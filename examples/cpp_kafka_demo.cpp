@@ -80,22 +80,19 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
 
-    kafkax::Core core(kafkax::Core::Config{1, 8192, 8192});
     std::string err;
 
-    auto set = [&](const char* key, const char* value) {
-        if (core.set_conf(key, value, err) != 0) {
-            std::cerr << "set(" << key << ", " << value
-                      << ") failed: " << err << std::endl;
-            return false;
-        }
-        return true;
-    };
+    kafkax::Core::DecodeConfig decode_cfg{4, 8192, 8192};
 
-    if (!set("bootstrap.servers", "192.168.2.209:9092") ||
-        !set("group.id", "momo-subpb-dev") ||
-        !set("enable.auto.commit", "true") ||
-        !set("auto.offset.reset", "earliest")) {
+    kafkax::Core::KafkaConfig kafka_cfg{};
+    kafka_cfg.bootstrap_servers = "192.168.2.209:9092";
+    kafka_cfg.group_id = "momo-subpb-dev";
+    kafka_cfg.enable_auto_commit = true;
+    kafka_cfg.auto_offset_reset = "earliest";
+
+    kafkax::Core core(decode_cfg, kafka_cfg);
+    if (!err.empty()) {
+        std::cerr << "Core(core_cfg, kafka_cfg) failed: " << err << std::endl;
         return 1;
     }
 

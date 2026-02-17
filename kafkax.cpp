@@ -2,7 +2,12 @@
 #include "kafkax/core.hpp"
 #include "kx/k.h"
 
+#define K3(f) K f(K x,K y,K z)
+#define K4(f) K f(K x,K y,K z,K r)
+
+#define KR -128
 #define KNL (K) 0
+#define KFK_OK RD_KAFKA_RESP_ERR_NO_ERROR
 #ifdef __GNUC__
 #  define UNUSED(x) x __attribute__((__unused__))
 #else
@@ -18,6 +23,8 @@ std::unique_ptr<kafkax::Core> g_core;
 
 int g_fd[2] = {-1, -1};
 std::atomic<bool> g_inited{false};
+
+static K clients;
 
 /* ---------------------------------------------------------
    helper
@@ -54,10 +61,12 @@ extern "C" {
         return KNL;
     }
 
-    K kafkax_consumer(K conf) {
-        kafkax::Core::DecodeConfig cfg;
-        g_core = std::make_unique<kafkax::Core>(cfg);
+    K kafkax_consumer(K decodeCfg, K kafkaCfg) {
+        kafkax::Core::DecodeConfig decfg;
+        kafkax::Core::KafkaConfig kfkcfg;
+        g_core = std::make_unique<kafkax::Core>(decfg, kfkcfg);
         g_inited.store(true);
+
 
         return KNL;
     }
