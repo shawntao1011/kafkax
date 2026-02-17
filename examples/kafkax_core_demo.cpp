@@ -15,9 +15,57 @@ void on_signal(int) {
     g_running = 0;
 }
 
+    struct Args {
+    std::string bootstrap_servers = "127.0.0.1:9092";
+    std::string topic = "momo-subpb-dev";
+    std::string group_id = "momo-subpb-dev";
+    std::string decoder_lib = "libkafkax_default_decoder.so";
+    std::string decoder_fn = "kafkax_default_decode";
+};
+
+void print_usage(const char* prog) {
+    std::cout
+        << "Usage:\n"
+        << "  " << prog
+        << " <bootstrap_servers> [topic] [group_id] [decoder_lib] [decoder_fn]\n\n"
+        << "Examples:\n"
+        << "  " << prog << " 192.168.2.209:9092\n"
+        << "  " << prog
+        << " 192.168.2.209:9092 momo-subpb-dev momo-subpb-dev "
+           "libkafkax_default_decoder.so kafkax_default_decode\n\n"
+        << "Defaults (when optional args are omitted):\n"
+        << "  topic       = momo-subpb-dev\n"
+        << "  group_id    = momo-subpb-dev\n"
+        << "  decoder_lib = libkafkax_default_decoder.so\n"
+        << "  decoder_fn  = kafkax_default_decode\n";
+}
+
+enum class ParseResult { Ok, ShowHelp, Invalid };
+
+ParseResult parse_args(int argc, char** argv, Args& out) {
+    if (argc < 2) {
+        print_usage(argv[0]);
+        return ParseResult::Invalid;
+    }
+
+    const std::string first = argv[1] ? argv[1] : "";
+    if (first == "-h" || first == "--help") {
+        print_usage(argv[0]);
+        return ParseResult::ShowHelp;
+    }
+
+    out.bootstrap_servers = argv[1];
+    if (argc > 2) out.topic = argv[2];
+    if (argc > 3) out.group_id = argv[3];
+    if (argc > 4) out.decoder_lib = argv[4];
+    if (argc > 5) out.decoder_fn = argv[5];
+
+    return ParseResult::Ok;
+}
+
 struct Stats {
     std::uint64_t total = 0;
-    std::uint64_t data  = 0;
+    std::uint64_t data = 0;
     std::uint64_t error = 0;
 
     std::uint64_t last_total = 0;
@@ -82,9 +130,14 @@ void print_event(const kafkax::Event& ev) {
 
 int main(int argc, char** argv) {
 
-    const std::string topic       = argc > 1 ? argv[1] : "momo-subpb-dev";
-    const std::string decoder_lib = argc > 2 ? argv[2] : "libkafkax_default_decoder.so";
-    const std::string decoder_fn  = argc > 3 ? argv[3] : "kafkax_default_decode";
+    Args args;
+    const ParseResult parse_result = parse_args(argc, argv, args);
+    if (parse_result == ParseResult::ShowHelp) {
+        return 0;
+    }
+    if (parse_result == ParseResult::Invalid) {
+        return 1;
+    }
 
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
@@ -94,8 +147,8 @@ int main(int argc, char** argv) {
     kafkax::Core::DecodeConfig decode_cfg{4, 8192, 8192};
 
     kafkax::Core::KafkaConfig kafka_cfg{};
-    kafka_cfg.bootstrap_servers = "192.168.2.209:9092";
-    kafka_cfg.group_id = "momo-subpb-dev";
+    kafka_cfg.bootstrap_servers = args.bootstrap_servers;
+    kafka_cfg.group_id = args.group_id;
     kafka_cfg.enable_auto_commit = true;
     kafka_cfg.auto_offset_reset = "earliest";
 
@@ -105,12 +158,13 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (core.bind_topic(topic, decoder_lib, decoder_fn, err) != 0) {
+    if (core.bind_topic(args.topic, args.decoder_lib, args.decoder_fn, err) !=
+        0) {
         std::cerr << "bind_topic failed: " << err << std::endl;
         return 1;
     }
 
-    if (core.subscribe({topic}, err) != 0) {
+    if (core.subscribe({args.topic}, err) != 0) {
         std::cerr << "subscribe failed: " << err << std::endl;
         return 1;
     }
@@ -121,8 +175,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::cout << "kafkax drainTo demo started. topic=" << topic
-              << " decoder=" << decoder_lib << ":" << decoder_fn
+    std::cout << "kafkax drainTo demo started. brokers=" << args.bootstrap_servers
+              << " topic=" << args.topic << " group_id=" << args.group_id
+              << " decoder=" << args.decoder_lib << ":" << args.decoder_fn
               << " (Ctrl+C to stop)" << std::endl;
 
     Stats stats;
@@ -165,7 +220,7 @@ int main(int argc, char** argv) {
 
             for (const auto& ev : out) {
                 stats.on_event(ev);
-                // print_event(ev)
+                // print_event(ev);
             }
 
             stats.maybe_print();

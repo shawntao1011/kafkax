@@ -1,0 +1,7 @@
+add_executable(kafkax_consume_demo kafkax_core_demo.cpp)
+target_include_directories(kafkax_consume_demo PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(kafkax_consume_demo PRIVATE kafkax_core)
+
+add_executable(kafkax_qipc_demo qipc_usage_example.cpp)
+target_include_directories(kafkax_qipc_demo PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(kafkax_qipc_demo PRIVATE kafkax_qipc)
