@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <librdkafka/rdkafka.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,26 +14,6 @@ extern "C" {
 #define KAFKAX_DECODE_ERROR 1
 
 /* ================================
- *  Input: Envelope
- * ================================ */
-
-/* A read-only view of one Kafka message (or any message source).
- * All pointers are owned by the core and valid only during the decode call.
- */
-typedef struct kafkax_envelope {
-    const char* topic;          /* null-terminated string */
-
-    const uint8_t* key;
-    int32_t key_len;            /* bytes */
-
-    const uint8_t* payload;
-    int32_t payload_len;        /* bytes */
-
-    int64_t ingest_ns;          /* timestamp in ns */
-} kafkax_envelope_t;
-
-
-/* ================================
  *  Output: Decode Result
  * ================================ */
 
@@ -40,7 +21,7 @@ typedef struct kafkax_envelope {
  *
  * On success:
  *   out->kind  = KAFKAX_DECODE_OK
- *   out->bytes = non-NULL (can be env->payload for passthrough)
+ *   out->bytes = non-NULL (can be msg->payload for passthrough)
  *   out->len   = >= 0
  *
  * On error:
@@ -78,7 +59,7 @@ typedef struct kafkax_decode_result {
  * NOTE: if implemented in C++, you MUST export with `extern "C"`.
  */
 typedef int (*kafkax_decode_fn)(
-    const kafkax_envelope_t* env,
+    const rd_kafka_message_t* msg,
     kafkax_decode_result_t* out
 );
 

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(kafkax LANGUAGES C CXX)
 
+include(GNUInstallDirs)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -18,6 +20,7 @@ add_library(kafkax_core STATIC
 target_include_directories(kafkax_core
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 if(UNIX AND NOT APPLE)
     target_link_libraries(kafkax_core

@@ -41,17 +41,6 @@ namespace kafkax {
         };
     } // namespace kafkax::detail
 
-
-    /* --------------------------
-     * Input envelope (internal)
-     * -------------------------- */
-    struct Envelope {
-        std::string topic;
-        std::vector<std::uint8_t> key;
-        std::vector<std::uint8_t> payload;
-        std::int64_t ingest_ns{0};
-    };
-
     class Core {
     public:
         struct KafkaConfig {
@@ -73,7 +62,14 @@ namespace kafkax {
         };
 
         struct RawMsg {
-            Envelope env;
+            rd_kafka_message_t* msg{nullptr};
+
+            ~RawMsg() {
+                if (msg) {
+                    rd_kafka_message_destroy(msg);
+                    msg = nullptr;
+                }
+            }
         };
 
         using DrainFn = void(*)(void* user, const Event& ev);
@@ -125,7 +121,7 @@ namespace kafkax {
 
         void maybe_pause();
 
-        std::size_t next_worker(const Envelope& env);
+        std::size_t next_worker(const rd_kafka_message_t* msg);
 
     private:
         DecodeConfig cfg_;

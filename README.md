@@ -6,9 +6,6 @@
 It defines a stable C ABI for decoder plugins and a minimal runtime to bind
 Kafka topics to user-provided decode logic.
 
-> `subscribe(topic)` is sugar for  
-> `subscribe(topic, default_decoder)`.
-
 ---
 
 ## Build
@@ -40,18 +37,13 @@ Artifacts:
 
 ### Default decoder
 
-```c
-kafkax_subscribe("marketdata.demo");
-```
-
-Equivalent to:
-
-```c
-kafkax_subscribe_with_decoder(
-    "marketdata.demo",
-    "libkafkax_default_decoder.so",
-    "kafkax_default_decode"
-);
+```q
+.kfkx.bind[clientID;
+    `marketdata.demo;
+    "plugins/libkafkax_default_decoder.so";
+    `kafkax_default_decode];
+    
+.kfkx.subscribe[clientID; `marketdata.demo];
 ```
 
 The default decoder performs a raw passthrough of the Kafka payload.
@@ -63,26 +55,26 @@ The default decoder performs a raw passthrough of the Kafka payload.
 Decoders must implement the ABI defined in:
 
 ```
-include/kafkax/decoder.h
+include/decoder.h
 ```
 
 Minimal decoder example:
 
 ```c
-#include "kafkax/decoder.h"
+#include "decoder.h"
 
 int kafkax_decoder_abi_version() {
     return KAFKAX_DECODER_ABI_VERSION;
 }
 
 int my_decode(
-    const kafkax_envelope_t* env,
+    const rd_kafka_message_t* msg,
     kafkax_decode_result_t* out
 ) {
     out->kind = 0;
-    out->msg_type = 0;
-    out->out_bytes = env->value;
-    out->out_len = env->value_len;
+    out->err_msg[0] = '\0';
+    out->bytes = (const uint8_t*)msg->payload;
+    out->len = msg->len;
     return 0;
 }
 ```
@@ -103,7 +95,7 @@ kafkax_subscribe_with_decoder(
 
 - C ABI, versioned
 - Loaded via `dlopen` / `dlsym`
-- Input: immutable Kafka envelope
+- Input: immutable `rd_kafka_message_t`
 - Output: decoded payload or error
 - All decoders (including built-in) follow the same contract
 

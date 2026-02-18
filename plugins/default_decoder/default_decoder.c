@@ -5,22 +5,22 @@ int kafkax_decoder_abi_version() {
 }
 
 /* Reference decoder: passthrough raw payload. */
-static int decode_passthrough(const kafkax_envelope_t* env,
+static int decode_passthrough(const rd_kafka_message_t* msg,
                           kafkax_decode_result_t* out)
 {
-    if (!env || !out) {
+    if (!msg || !out) {
         return -1;
     }
 
     out->kind = KAFKAX_DECODE_OK;
-    out->bytes = env->payload;
-    out->len = env->payload_len;
+    out->bytes = (const uint8_t*)msg->payload;
+    out->len = msg->len;
     out->err_msg[0] = '\0';
     return 0;
 }
 
 /* Backward-compatible alias used by earlier demo code. */
-int kafkax_default_decode(const kafkax_envelope_t* env,
+int kafkax_default_decode(const rd_kafka_message_t* msg,
                           kafkax_decode_result_t* out) {
-    return decode_passthrough(env, out);
+    return decode_passthrough(msg, out);
 }

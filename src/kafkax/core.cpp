@@ -303,17 +303,10 @@ namespace kafkax {
                 continue;
             }
 
-            Envelope env;
-            env.topic = rd_kafka_topic_name(msg->rkt);
-
-            env.payload.assign(
-                (uint8_t*)msg->payload,
-                (uint8_t*)msg->payload + msg->len);
-
             auto raw = std::make_unique<RawMsg>();
-            raw->env = std::move(env);
+            raw->msg = msg;
 
-            auto worker = next_worker(raw->env);
+            auto worker = next_worker(raw->msg);
 
             /* Backpressure push (blocking) */
             for (;;) {
@@ -335,7 +328,6 @@ namespace kafkax {
             std::atomic_notify_one(&epoch);
 
             total_raw_.fetch_add(1);
-            rd_kafka_message_destroy(msg);
 
             maybe_pause();
         }
@@ -374,27 +366,42 @@ namespace kafkax {
 
             auto ev = std::make_unique<Event>();
 
-            ev->topic = raw->env.topic;
-            ev->key = raw->env.key;
-            ev->ingest_ns = raw->env.ingest_ns;
+            const auto* msg = raw->msg;
+
+            if (!msg) {
+                ev->kind = Event::Kind::Error;
+                std::strncpy(
+                    ev->err_msg,
+                    "null kafka message",
+                    sizeof(ev->err_msg));
+            } else {
+                ev->topic = rd_kafka_topic_name(msg->rkt);
+
+                if (msg->key && msg->key_len > 0) {
+                    const auto* key = static_cast<const std::uint8_t*>(msg->key);
+                    ev->key.assign(key, key + msg->key_len);
+                }
+
+                rd_kafka_timestamp_type_t ts_type = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
+                const std::int64_t ts_ms = rd_kafka_message_timestamp(msg, &ts_type);
+                if (ts_ms >= 0) {
+                    ev->ingest_ns = ts_ms * 1000000;
+                }
+            }
 
             kafkax_decode_result_t result{};
-            kafkax_envelope_t cenv{};
+            auto fn = registry_.get_fn(ev->topic);
 
-            cenv.topic = raw->env.topic.c_str();
-            cenv.payload = raw->env.payload.data();
-            cenv.payload_len = raw->env.payload.size();
-
-            auto fn = registry_.get_fn(raw->env.topic);
-
-            if (!fn) {
+            if (ev->kind == Event::Kind::Error) {
+                // keep existing error
+            } else if (!fn) {
                 ev->kind = Event::Kind::Error;
                 std::strncpy(
                     ev->err_msg,
                     "decoder not bound",
                     sizeof(ev->err_msg));
             } else {
-                int rc = fn(&cenv, &result);
+                int rc = fn(msg, &result);
                 if (rc != 0 || result.kind != 0) {
                     ev->kind = Event::Kind::Error;
                     std::strncpy(
@@ -407,6 +414,11 @@ namespace kafkax {
                         result.bytes,
                         result.bytes + result.len);
                 }
+            }
+
+            if (msg) {
+                rd_kafka_message_destroy(raw->msg);
+                raw->msg = nullptr;
             }
 
             /* Blocking event push */
@@ -515,7 +527,7 @@ namespace kafkax {
         }
     }
 
-    std::size_t Core::next_worker(const Envelope&)
+    std::size_t Core::next_worker(const rd_kafka_message_t*)
     {
         return rr_.fetch_add(1) % cfg_.decode_threads;
     }
