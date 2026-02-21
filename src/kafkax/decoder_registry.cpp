@@ -5,7 +5,9 @@
 #include <windows.h>
 #endif
 
-kafkax::DecoderRegistry::DecoderRegistry() = default;
+kafkax::DecoderRegistry::DecoderRegistry() {
+    router_.store(std::make_shared<Router>());
+}
 
 kafkax::DecoderRegistry::~DecoderRegistry() {
     std::lock_guard<std::mutex> lk(mu_);
@@ -62,24 +64,43 @@ int kafkax::DecoderRegistry::load_decoder(
     return 0;
 }
 
-int kafkax::DecoderRegistry::bind(const std::string& topic,
-                           const std::string& so_path,
-                           const std::string& symbol,
-                           std::string& err)
+bool kafkax::DecoderRegistry::bind(const std::string& topic,
+                            const std::string& so_path,
+                            const std::string& decoder_name,
+                            std::string& err)
 {
-    std::lock_guard<std::mutex> lk(mu_);
-
-    if (topic_map_.count(topic)) {
-        err = "topic already bound";
-        return -1;
+    void* handle = dlopen(so_path.c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (!handle) {
+        err = dlerror();
+        return false;
     }
 
-    std::unique_ptr<DecoderEntry> entry;
-    int rc = load_decoder(so_path, symbol, entry, err);
-    if (rc != 0) return rc;
+    // check ABI Version
+    auto abi_fn = (int(*)())dlsym(handle, "kafkax_decoder_abi_version");
+    if (!abi_fn || abi_fn() != KAFKAX_DECODER_ABI_VERSION) {
+        err = "ABI version mismatch";
+        dlclose(handle);
+        return false;
+    }
 
-    topic_map_[topic] = std::move(entry);
-    return 0;
+    auto fn = (kafkax_decode_fn)dlsym(handle, decoder.c_str());
+    if (!fn) {
+        err = "decoder symbol not found: " + decoder;
+        dlclose(handle);
+        return false;
+    }
+
+    // New Router
+    auto old_router = router_.load();
+    auto new_router = std::make_shared<Router>(*old_router);
+
+    new_router->table[topic] = fn;
+
+    router_.store(new_router, std::memory_order_release);
+
+    loaded_plugins_.push_back({handle, so_path});
+
+    return true;
 }
 
 int kafkax::DecoderRegistry::rebind(const std::string& topic,
@@ -133,13 +154,8 @@ bool kafkax::DecoderRegistry::get_decoder_info(const std::string& topic, Binding
 }
 
 kafkax_decode_fn
-kafkax::DecoderRegistry::get_fn(const std::string& topic) const
-{
-    std::lock_guard<std::mutex> lk(mu_);
-
-    auto it = topic_map_.find(topic);
-    if (it == topic_map_.end())
-        return nullptr;
-
-    return it->second->fn;
+kafkax::DecoderRegistry::get_fn(const std::string& topic) const {
+    auto r = router_.load(std::memory_order_acquire);
+    if (!r) return nullptr;
+    return r->lookup(topic);
 }

@@ -24,3 +24,5 @@ int kafkax_default_decode(const rd_kafka_message_t* msg,
                           kafkax_decode_result_t* out) {
     return decode_passthrough(msg, out);
 }
+/* Optional ABI anchor: compile-time signature enforcement. */
+const kafkax_decode_fn kafkax_decoder_entry = kafkax_default_decode;

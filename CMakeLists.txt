@@ -13,6 +13,13 @@ pkg_check_modules(RDKAFKA   REQUIRED IMPORTED_TARGET rdkafka)
 
 option(KAFKAX_BUILD_EXAMPLES "Build example subproject" ON)
 
+add_library(kafkax_abi INTERFACE)
+target_include_directories(kafkax_abi INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
+add_library(kafkax::abi ALIAS kafkax_abi)
+
 add_library(kafkax_core STATIC
         src/kafkax/core.cpp
         src/kafkax/decoder_registry.cpp
@@ -22,6 +29,7 @@ target_include_directories(kafkax_core
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
+target_link_libraries(kafkax_core PUBLIC kafkax::abi)
 if(UNIX AND NOT APPLE)
     target_link_libraries(kafkax_core
             PRIVATE
@@ -29,6 +37,7 @@ if(UNIX AND NOT APPLE)
             PkgConfig::RDKAFKA
     )
 endif()
+add_library(kafkax::core ALIAS kafkax_core)
 
 # header-only dependency: kx/k.h
 add_library(kx_kdb INTERFACE)
@@ -46,11 +55,12 @@ target_link_libraries(kafkax_q PRIVATE kafkax_core)
 add_library(kafkax_qipc STATIC
         src/qipc/qipc_c.cpp
 )
-target_compile_features(kafkax_qipc PUBLIC cxx_std_20)
 target_include_directories(kafkax_qipc PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
+target_link_libraries(kafkax_qipc PUBLIC kafkax::abi)
+add_library(kafkax::qipc ALIAS kafkax_qipc)
 
 # Plugins
 add_subdirectory(plugins/default_decoder)
@@ -59,3 +69,17 @@ add_subdirectory(plugins/default_decoder)
 if(KAFKAX_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
+
+install(DIRECTORY include/ DESTINATION include)
+
+install(TARGETS
+        kafkax_abi
+        kafkax_qipc
+        kafkax_core
+        EXPORT kafkaxTargets
+)
+
+install(EXPORT kafkaxTargets
+        NAMESPACE kafkax::
+        DESTINATION lib/cmake/kafkax
+)
