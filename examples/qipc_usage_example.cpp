@@ -5,8 +5,8 @@
 #include <chrono>
 #include <iostream>
 
-#include "qipc/encode.hpp"   // C++ API
-#include "qipc/reflect.hpp"
+#include "kafkax/qipc/encode.hpp"   // C++ API
+#include "kafkax/qipc/reflect.hpp"
 
 static std::string to_hex_0x(const std::vector<std::uint8_t>& bytes) {
   static constexpr char kHex[] = "0123456789abcdef";

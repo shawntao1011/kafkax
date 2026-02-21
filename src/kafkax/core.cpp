@@ -389,7 +389,6 @@ namespace kafkax {
                 }
             }
 
-            kafkax_decode_result_t result{};
             auto fn = registry_.get_fn(ev->topic);
 
             if (ev->kind == Event::Kind::Error) {
@@ -401,18 +400,48 @@ namespace kafkax {
                     "decoder not bound",
                     sizeof(ev->err_msg));
             } else {
-                int rc = fn(msg, &result);
-                if (rc != 0 || result.kind != 0) {
+                std::vector<std::uint8_t> decode_buf(4096);
+                kafkax_decode_out_t out{};
+
+                kafkax_envelope_t env{};
+                env.topic = kafkax_str_view_t{ev->topic.data(), ev->topic.size()};
+                env.partition = msg->partition;
+                env.offset = msg->offset;
+
+                rd_kafka_timestamp_type_t ts_type = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
+                env.timestamp_ms = rd_kafka_message_timestamp(msg, &ts_type);
+
+                env.key = kafkax_bytes_view_t{
+                    static_cast<const std::uint8_t*>(msg->key),
+                    static_cast<std::size_t>(msg->key_len)};
+                env.payload = kafkax_bytes_view_t{
+                    static_cast<const std::uint8_t*>(msg->payload),
+                    static_cast<std::size_t>(msg->len)};
+                env.symbol = kafkax_str_view_t{nullptr, 0};
+                env.opaque = msg;
+
+                out.buf = decode_buf.data();
+                out.cap = decode_buf.size();
+
+                int rc = fn(&env, &out);
+                if (rc == 0 && out.kind == KAFKAX_DECODE_NEED_MORE && out.need > out.cap) {
+                    decode_buf.resize(out.need);
+                    out.buf = decode_buf.data();
+                    out.cap = decode_buf.size();
+                    rc = fn(&env, &out);
+                }
+
+                if (rc != 0 || out.kind != KAFKAX_DECODE_OK) {
                     ev->kind = Event::Kind::Error;
-                    std::strncpy(
-                        ev->err_msg,
-                        result.err_msg,
-                        sizeof(ev->err_msg));
+                    if (out.err_msg[0] != '\0') {
+                        std::strncpy(ev->err_msg, out.err_msg, sizeof(ev->err_msg));
+                    } else {
+                        std::strncpy(ev->err_msg, "decode failed", sizeof(ev->err_msg));
+                    }
+                    ev->err_msg[sizeof(ev->err_msg) - 1] = '\0';
                 } else {
                     ev->kind = Event::Kind::Data;
-                    ev->bytes.assign(
-                        result.bytes,
-                        result.bytes + result.len);
+                    ev->bytes.assign(decode_buf.begin(), decode_buf.begin() + out.len);
                 }
             }
 

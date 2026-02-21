@@ -1,5 +1,5 @@
-#include "qipc/qipc_c.h"
-#include "qipc/writer.hpp"
+#include "kafkax/qipc/qipc_c.h"
+#include "kafkax/qipc/writer.hpp"
 
 #include <vector>
 #include <string_view>

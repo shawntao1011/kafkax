@@ -20,7 +20,7 @@ void on_signal(int) {
     std::string topic = "momo-subpb-dev";
     std::string group_id = "momo-subpb-dev";
     std::string decoder_lib = "libkafkax_default_decoder.so";
-    std::string decoder_fn = "kafkax_default_decode";
+    std::string decoder_fn = "kafkax_default_decoder";
 };
 
 void print_usage(const char* prog) {
@@ -29,15 +29,15 @@ void print_usage(const char* prog) {
         << "  " << prog
         << " <bootstrap_servers> [topic] [group_id] [decoder_lib] [decoder_fn]\n\n"
         << "Examples:\n"
-        << "  " << prog << " 192.168.2.209:9092\n"
+        << "  " << prog << " 127.0.0.1:9092\n"
         << "  " << prog
-        << " 192.168.2.209:9092 momo-subpb-dev momo-subpb-dev "
-           "libkafkax_default_decoder.so kafkax_default_decode\n\n"
+        << " 127.0.0.1 momo.orderbook test.demo"
+           "libkafkax_default_decoder.so kafkax_default_decoder\n\n"
         << "Defaults (when optional args are omitted):\n"
-        << "  topic       = momo-subpb-dev\n"
-        << "  group_id    = momo-subpb-dev\n"
+        << "  topic       = momo.orderbook\n"
+        << "  group_id    = test.demo\n"
         << "  decoder_lib = libkafkax_default_decoder.so\n"
-        << "  decoder_fn  = kafkax_default_decode\n";
+        << "  decoder_fn  = kafkax_default_decoder\n";
 }
 
 enum class ParseResult { Ok, ShowHelp, Invalid };
