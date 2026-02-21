@@ -5,7 +5,7 @@ int kafkax_decoder_abi_version(void) {
     return KAFKAX_DECODER_ABI_VERSION;
 }
 
-int kafkax_passthrough_decode(const kafkax_envelope_t* env,
+int kafkax_passthrough_decoder(const kafkax_envelope_t* env,
                           kafkax_decode_out_t* out) {
     if (!env || !out || !out->buf) {
         return -1;
@@ -29,5 +29,7 @@ int kafkax_passthrough_decode(const kafkax_envelope_t* env,
     return 0;
 }
 
-/* Optional ABI anchor: compile-time signature enforcement. */
-const kafkax_decode_fn kafkax_default_decoder = kafkax_passthrough_decode;
+int kafkax_default_decoder(const kafkax_envelope_t* env,
+    kafkax_decode_out_t* out) {
+    return kafkax_passthrough_decoder(env, out);
+}
