@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "kafkax/decoder.h"
+#include "decoder.h"
 
 namespace kafkax {
 

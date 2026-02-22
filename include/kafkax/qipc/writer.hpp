@@ -123,7 +123,7 @@ struct Builder {
 
     std::vector<std::uint8_t> to_bytes() {
         finalize_ipc_header();
-        return buf;
+        return std::move(buf);
     }
 };
 

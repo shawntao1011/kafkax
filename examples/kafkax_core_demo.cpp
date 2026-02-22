@@ -5,7 +5,7 @@
 #include <thread>
 #include <vector>
 #include <poll.h>
-#include "kafkax/core.hpp"
+#include "../include/kafkax/core/core.hpp"
 
 namespace {
 

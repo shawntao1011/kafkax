@@ -1,4 +1,4 @@
-#include "kafkax/decoder.h"
+#include "../../include/kafkax/core/decoder.h"
 #include <string.h>
 
 int kafkax_decoder_abi_version(void) {

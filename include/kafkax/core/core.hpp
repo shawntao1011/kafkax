@@ -10,8 +10,8 @@
 
 #include <librdkafka/rdkafka.h>
 
-#include "event.h"
-#include "kafkax/decoder_registry.hpp"
+#include "kafkax/core/event.h"
+#include "decoder_registry.hpp"
 
 namespace kafkax {
 

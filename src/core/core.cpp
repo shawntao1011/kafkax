@@ -1,4 +1,4 @@
-#include "kafkax/core.hpp"
+#include "../../include/kafkax/core/core.hpp"
 #include <sys/eventfd.h>
 #include <unistd.h>
 #include <errno.h>
@@ -412,7 +412,6 @@ namespace kafkax {
                     "decoder not bound",
                     sizeof(ev->err_msg));
             } else {
-                std::vector<std::uint8_t> decode_buf(4096);
                 kafkax_decode_out_t out{};
 
                 kafkax_envelope_t env{};
@@ -432,14 +431,15 @@ namespace kafkax {
                 env.symbol = kafkax_str_view_t{nullptr, 0};
                 env.opaque = msg;
 
-                out.buf = decode_buf.data();
-                out.cap = decode_buf.size();
+                ev->bytes.resize(4096);
+                out.buf = ev->bytes.data();
+                out.cap = ev->bytes.size();
 
                 int rc = fn(&env, &out);
                 if (rc == 0 && out.kind == KAFKAX_DECODE_NEED_MORE && out.need > out.cap) {
-                    decode_buf.resize(out.need);
-                    out.buf = decode_buf.data();
-                    out.cap = decode_buf.size();
+                    ev->bytes.resize(out.need);
+                    out.buf = ev->bytes.data();
+                    out.cap = ev->bytes.size();
                     rc = fn(&env, &out);
                 }
 
@@ -453,7 +453,7 @@ namespace kafkax {
                     ev->err_msg[sizeof(ev->err_msg) - 1] = '\0';
                 } else {
                     ev->kind = Event::Kind::Data;
-                    ev->bytes.assign(decode_buf.begin(), decode_buf.begin() + out.len);
+                    ev->bytes.resize(out.len);
                 }
             }
 
