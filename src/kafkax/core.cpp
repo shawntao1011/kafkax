@@ -182,6 +182,18 @@ namespace kafkax {
             return -1;
         }
 
+        for (const auto& topic : topics) {
+            if (registry_.get_fn(topic) != nullptr) {
+                continue;
+            }
+            if (registry_.bind_builtin(topic,
+                                       "kafkax_default_decoder",
+                                       kafkax_default_decoder,
+                                       err) != 0) {
+                return -1;
+                                       }
+        }
+
         char ebuf[512];
         rk_ = rd_kafka_new(RD_KAFKA_CONSUMER, conf_, ebuf, sizeof(ebuf));
         if (!rk_) { err = ebuf; return -1; }

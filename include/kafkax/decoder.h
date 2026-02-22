@@ -78,6 +78,13 @@ typedef int (*kafkax_decode_fn)(
     kafkax_decode_out_t* out
 );
 
+/* ----------- Built-in decoders ----------- */
+int kafkax_passthrough_decoder(const kafkax_envelope_t* env,
+                               kafkax_decode_out_t* out);
+int kafkax_default_decoder(const kafkax_envelope_t* env,
+                           kafkax_decode_out_t* out);
+
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

@@ -30,7 +30,6 @@ namespace kafkax {
             return -1;
         }
 
-
         /* Check ABI version */
         auto abi_fn = reinterpret_cast<int (*)()>(
             dlsym(handle, "kafkax_decoder_abi_version"));
@@ -97,6 +96,26 @@ namespace kafkax {
         router_.store(new_router, std::memory_order_release);
 
         topic_bindings_[topic] = BindingEntry{plugin_idx, BindingInfo{so_path, symbol}};
+        return 0;
+    }
+
+    int DecoderRegistry::bind_builtin(const std::string& topic,
+                                  const std::string& symbol,
+                                  kafkax_decode_fn fn,
+                                  std::string& err) {
+        if (!fn) {
+            err = "builtin decoder function is null";
+            return -1;
+        }
+
+        std::lock_guard<std::mutex> lk(mu_);
+
+        auto old_router = router_.load(std::memory_order_acquire);
+        auto new_router = std::make_shared<Router>(*old_router);
+        new_router->table[topic] = fn;
+        router_.store(new_router, std::memory_order_release);
+
+        topic_bindings_[topic] = BindingEntry{0, BindingInfo{"builtin:kafkax_core", symbol}};
         return 0;
     }
 

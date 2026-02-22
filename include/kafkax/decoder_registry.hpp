@@ -33,6 +33,11 @@ namespace kafkax {
                   const std::string& decoder_name,
                   std::string& err);
 
+        int bind_builtin(const std::string& topic,
+                 const std::string& symbol,
+                 kafkax_decode_fn fn,
+                 std::string& err);
+
         /* Rebind topic (replace existing) */
         int rebind(const std::string& topic,
                    const std::string& so_path,

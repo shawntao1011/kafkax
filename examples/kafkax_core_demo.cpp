@@ -19,8 +19,13 @@ void on_signal(int) {
     std::string bootstrap_servers = "127.0.0.1:9092";
     std::string topic = "momo-subpb-dev";
     std::string group_id = "momo-subpb-dev";
-    std::string decoder_lib = "libkafkax_default_decoder.so";
-    std::string decoder_fn = "kafkax_default_decoder";
+
+    std::string decoder_lib;
+    std::string decoder_fn;
+
+    bool use_external_decoder() const {
+        return !decoder_lib.empty() && !decoder_fn.empty();
+    }
 };
 
 void print_usage(const char* prog) {
@@ -30,14 +35,15 @@ void print_usage(const char* prog) {
         << " <bootstrap_servers> [topic] [group_id] [decoder_lib] [decoder_fn]\n\n"
         << "Examples:\n"
         << "  " << prog << " 127.0.0.1:9092\n"
+        << "  " << prog << " 127.0.0.1 momo.orderbook test.demo\n"
         << "  " << prog
         << " 127.0.0.1 momo.orderbook test.demo"
-           "libkafkax_default_decoder.so kafkax_default_decoder\n\n"
+            " libkafkax_decoder_xxx.so decoder_entry\n\n"
         << "Defaults (when optional args are omitted):\n"
         << "  topic       = momo.orderbook\n"
         << "  group_id    = test.demo\n"
-        << "  decoder_lib = libkafkax_default_decoder.so\n"
-        << "  decoder_fn  = kafkax_default_decoder\n";
+        << "  decoder     = built-in kafkax_default_decoder\n"
+        << "  decoder_lib / decoder_fn: optional, if both provided then override built-in binding\n";
 }
 
 enum class ParseResult { Ok, ShowHelp, Invalid };
@@ -59,6 +65,13 @@ ParseResult parse_args(int argc, char** argv, Args& out) {
     if (argc > 3) out.group_id = argv[3];
     if (argc > 4) out.decoder_lib = argv[4];
     if (argc > 5) out.decoder_fn = argv[5];
+
+    if ((out.decoder_lib.empty() && !out.decoder_fn.empty()) ||
+    (!out.decoder_lib.empty() && out.decoder_fn.empty())) {
+        std::cerr << "decoder_lib and decoder_fn must be provided together" << std::endl;
+        print_usage(argv[0]);
+        return ParseResult::Invalid;
+    }
 
     return ParseResult::Ok;
 }
@@ -158,10 +171,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (core.bind_topic(args.topic, args.decoder_lib, args.decoder_fn, err) !=
-        0) {
-        std::cerr << "bind_topic failed: " << err << std::endl;
-        return 1;
+    if (args.use_external_decoder()) {
+        if (core.bind_topic(args.topic, args.decoder_lib, args.decoder_fn, err) != 0) {
+            std::cerr << "bind_topic failed: " << err << std::endl;
+            return 1;
+        }
     }
 
     if (core.subscribe({args.topic}, err) != 0) {
@@ -175,9 +189,13 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    const std::string decoder_desc = args.use_external_decoder()
+        ? (args.decoder_lib + ":" + args.decoder_fn)
+        : "built-in:kafkax_default_decoder";
+
     std::cout << "kafkax drainTo demo started. brokers=" << args.bootstrap_servers
               << " topic=" << args.topic << " group_id=" << args.group_id
-              << " decoder=" << args.decoder_lib << ":" << args.decoder_fn
+              << " decoder=" << decoder_desc
               << " (Ctrl+C to stop)" << std::endl;
 
     Stats stats;
