@@ -47,7 +47,7 @@ namespace kafkax {
             std::string bootstrap_servers{};
             std::string group_id{};
             bool enable_auto_commit{true};
-            std::string auto_offset_reset{"earliest"};
+            std::string auto_offset_reset{"latest"};
 
             std::unordered_map<std::string, std::string> extra{};
         };

@@ -9,122 +9,135 @@
 
 namespace {
 
-volatile std::sig_atomic_t g_running = 1;
+    volatile std::sig_atomic_t g_running = 1;
 
-void on_signal(int) {
-    g_running = 0;
-}
+    void on_signal(int) {
+        g_running = 0;
+    }
 
     struct Args {
-    std::string bootstrap_servers = "127.0.0.1:9092";
-    std::string topic = "momo-subpb-dev";
-    std::string group_id = "momo-subpb-dev";
-    std::string decoder_lib = "libkafkax_default_decoder.so";
-    std::string decoder_fn = "kafkax_default_decoder";
-};
+        std::string bootstrap_servers = "127.0.0.1:9092";
+        std::string topic = "momo-subpb-dev";
+        std::string group_id = "momo-subpb-dev";
 
-void print_usage(const char* prog) {
-    std::cout
-        << "Usage:\n"
-        << "  " << prog
-        << " <bootstrap_servers> [topic] [group_id] [decoder_lib] [decoder_fn]\n\n"
-        << "Examples:\n"
-        << "  " << prog << " 127.0.0.1:9092\n"
-        << "  " << prog
-        << " 127.0.0.1 momo.orderbook test.demo"
-           "libkafkax_default_decoder.so kafkax_default_decoder\n\n"
-        << "Defaults (when optional args are omitted):\n"
-        << "  topic       = momo.orderbook\n"
-        << "  group_id    = test.demo\n"
-        << "  decoder_lib = libkafkax_default_decoder.so\n"
-        << "  decoder_fn  = kafkax_default_decoder\n";
-}
+        std::string decoder_lib;
+        std::string decoder_fn;
 
-enum class ParseResult { Ok, ShowHelp, Invalid };
+        bool use_external_decoder() const {
+            return !decoder_lib.empty() && !decoder_fn.empty();
+        }
+    };
 
-ParseResult parse_args(int argc, char** argv, Args& out) {
-    if (argc < 2) {
-        print_usage(argv[0]);
-        return ParseResult::Invalid;
+    void print_usage(const char* prog) {
+        std::cout
+            << "Usage:\n"
+            << "  " << prog
+            << " <bootstrap_servers> [topic] [group_id] [decoder_lib] [decoder_fn]\n\n"
+            << "Examples:\n"
+            << "  " << prog << " 127.0.0.1:9092\n"
+            << "  " << prog << " 127.0.0.1 momo.orderbook test.demo\n"
+            << "  " << prog
+            << " 127.0.0.1 momo.orderbook test.demo"
+                " libkafkax_decoder_xxx.so decoder_entry\n\n"
+            << "Defaults (when optional args are omitted):\n"
+            << "  topic       = momo.orderbook\n"
+            << "  group_id    = test.demo\n"
+            << "  decoder     = built-in kafkax_default_decoder\n"
+            << "  decoder_lib / decoder_fn: optional, if both provided then override built-in binding\n";
     }
 
-    const std::string first = argv[1] ? argv[1] : "";
-    if (first == "-h" || first == "--help") {
-        print_usage(argv[0]);
-        return ParseResult::ShowHelp;
+    enum class ParseResult { Ok, ShowHelp, Invalid };
+
+    ParseResult parse_args(int argc, char** argv, Args& out) {
+        if (argc < 2) {
+            print_usage(argv[0]);
+            return ParseResult::Invalid;
+        }
+
+        const std::string first = argv[1] ? argv[1] : "";
+        if (first == "-h" || first == "--help") {
+            print_usage(argv[0]);
+            return ParseResult::ShowHelp;
+        }
+
+        out.bootstrap_servers = argv[1];
+        if (argc > 2) out.topic = argv[2];
+        if (argc > 3) out.group_id = argv[3];
+        if (argc > 4) out.decoder_lib = argv[4];
+        if (argc > 5) out.decoder_fn = argv[5];
+
+        if ((out.decoder_lib.empty() && !out.decoder_fn.empty()) ||
+        (!out.decoder_lib.empty() && out.decoder_fn.empty())) {
+            std::cerr << "decoder_lib and decoder_fn must be provided together" << std::endl;
+            print_usage(argv[0]);
+            return ParseResult::Invalid;
+        }
+
+        return ParseResult::Ok;
     }
 
-    out.bootstrap_servers = argv[1];
-    if (argc > 2) out.topic = argv[2];
-    if (argc > 3) out.group_id = argv[3];
-    if (argc > 4) out.decoder_lib = argv[4];
-    if (argc > 5) out.decoder_fn = argv[5];
+    struct Stats {
+        std::uint64_t total = 0;
+        std::uint64_t data = 0;
+        std::uint64_t error = 0;
 
-    return ParseResult::Ok;
-}
+        std::uint64_t last_total = 0;
+        std::chrono::steady_clock::time_point last_print =
+            std::chrono::steady_clock::now();
 
-struct Stats {
-    std::uint64_t total = 0;
-    std::uint64_t data = 0;
-    std::uint64_t error = 0;
+        void on_event(const kafkax::Event& ev) {
+            ++total;
+            if (ev.kind == kafkax::Event::Kind::Error) ++error;
+            else ++data;
+        }
 
-    std::uint64_t last_total = 0;
-    std::chrono::steady_clock::time_point last_print =
-        std::chrono::steady_clock::now();
+        void maybe_print() {
+            auto now = std::chrono::steady_clock::now();
+            auto sec = std::chrono::duration_cast<std::chrono::seconds>(now - last_print).count();
+            if (sec >= 1) {
+                std::uint64_t delta = total - last_total;
+                double qps = sec > 0 ? double(delta) / sec : 0.0;
 
-    void on_event(const kafkax::Event& ev) {
-        ++total;
-        if (ev.kind == kafkax::Event::Kind::Error) ++error;
-        else ++data;
-    }
+                std::cout << "[STATS] total=" << total
+                          << " data=" << data
+                          << " error=" << error
+                          << " qps=" << qps
+                          << std::endl;
 
-    void maybe_print() {
-        auto now = std::chrono::steady_clock::now();
-        auto sec = std::chrono::duration_cast<std::chrono::seconds>(now - last_print).count();
-        if (sec >= 1) {
-            std::uint64_t delta = total - last_total;
-            double qps = sec > 0 ? double(delta) / sec : 0.0;
+                last_total = total;
+                last_print = now;
+            }
+        }
+    };
 
-            std::cout << "[STATS] total=" << total
-                      << " data=" << data
-                      << " error=" << error
-                      << " qps=" << qps
-                      << std::endl;
-
-            last_total = total;
-            last_print = now;
+    static inline void drain_eventfd(int fd) {
+        // eventfd is NONBLOCK in Core; read until EAGAIN
+        std::uint64_t v;
+        for (;;) {
+            ssize_t n = ::read(fd, &v, sizeof(v));
+            if (n == (ssize_t)sizeof(v)) continue;
+            if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+            break;
         }
     }
-};
 
-static inline void drain_eventfd(int fd) {
-    // eventfd is NONBLOCK in Core; read until EAGAIN
-    std::uint64_t v;
-    for (;;) {
-        ssize_t n = ::read(fd, &v, sizeof(v));
-        if (n == (ssize_t)sizeof(v)) continue;
-        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
-        break;
+    void print_event(const kafkax::Event& ev) {
+        if (ev.kind == kafkax::Event::Kind::Error) {
+            std::cerr << "[ERROR] topic=" << ev.topic
+                      << " msg=" << ev.err_msg << std::endl;
+            return;
+        }
+
+        std::cout << "[DATA] topic=" << ev.topic
+                  << " len=" << ev.bytes.size();
+
+        if (!ev.bytes.empty()) {
+            std::cout << " payload="
+                      << std::string(ev.bytes.begin(), ev.bytes.end());
+        }
+
+        std::cout << std::endl;
     }
-}
-
-void print_event(const kafkax::Event& ev) {
-    if (ev.kind == kafkax::Event::Kind::Error) {
-        std::cerr << "[ERROR] topic=" << ev.topic
-                  << " msg=" << ev.err_msg << std::endl;
-        return;
-    }
-
-    std::cout << "[DATA] topic=" << ev.topic
-              << " len=" << ev.bytes.size();
-
-    if (!ev.bytes.empty()) {
-        std::cout << " payload="
-                  << std::string(ev.bytes.begin(), ev.bytes.end());
-    }
-
-    std::cout << std::endl;
-}
 
 } // namespace
 
@@ -144,7 +157,7 @@ int main(int argc, char** argv) {
 
     std::string err;
 
-    kafkax::Core::DecodeConfig decode_cfg{4, 8192, 8192};
+    kafkax::Core::DecodeConfig decode_cfg{4, 32768, 32768};
 
     kafkax::Core::KafkaConfig kafka_cfg{};
     kafka_cfg.bootstrap_servers = args.bootstrap_servers;
@@ -158,10 +171,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (core.bind_topic(args.topic, args.decoder_lib, args.decoder_fn, err) !=
-        0) {
-        std::cerr << "bind_topic failed: " << err << std::endl;
-        return 1;
+    if (args.use_external_decoder()) {
+        if (core.bind_topic(args.topic, args.decoder_lib, args.decoder_fn, err) != 0) {
+            std::cerr << "bind_topic failed: " << err << std::endl;
+            return 1;
+        }
     }
 
     if (core.subscribe({args.topic}, err) != 0) {
@@ -175,9 +189,13 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    const std::string decoder_desc = args.use_external_decoder()
+        ? (args.decoder_lib + ":" + args.decoder_fn)
+        : "built-in:kafkax_default_decoder";
+
     std::cout << "kafkax drainTo demo started. brokers=" << args.bootstrap_servers
               << " topic=" << args.topic << " group_id=" << args.group_id
-              << " decoder=" << args.decoder_lib << ":" << args.decoder_fn
+              << " decoder=" << decoder_desc
               << " (Ctrl+C to stop)" << std::endl;
 
     Stats stats;

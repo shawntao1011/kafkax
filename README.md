@@ -1,107 +1,102 @@
 # kafkax – Kafka Decode Extension Framework
 
-`kafkax` is a lightweight framework for extending Kafka message processing with
-**dynamically loaded decode functions**.
+`kafkax` is a lightweight Kafka consumer + decoder bridge designed for kdb+/q environments.
 
-It defines a stable C ABI for decoder plugins and a minimal runtime to bind
-Kafka topics to user-provided decode logic.
+It focuses on:
 
----
-
-## Build
-
-### Requirements
-
-- CMake ≥ 3.16
-- C/C++ compiler with C++20 support
-- POSIX dynamic loader (Linux / macOS)
-
-### Build steps
-
-```bash
-git clone <repo>
-cd kafkax
-cmake -S . -B build
-cmake --build build
-```
-
-Artifacts:
-
-- `libkafkax.so`
-- `libkafkax_default_decoder.so`
-- `subscribe_demo`
+- Stable C ABI surface
+- Plugin-based decoder model
+- Clean integration with q via a single shared object
+- Predictable performance characteristics
 
 ---
 
-## Usage
+## Build Output
 
-### Default decoder
+The current build produces a single shared library: ```libkafkax_q.so```
 
-```q
-.kfkx.bind[clientID;
-    `marketdata.demo;
-    "plugins/libkafkax_default_decoder.so";
-    `kafkax_default_decode];
-    
-.kfkx.subscribe[clientID; `marketdata.demo];
-```
-
-The default decoder performs a raw passthrough of the Kafka payload.
+This is the only required artifact for q-side integration.
 
 ---
 
-### Custom decoder plugin
+## Custom Decoder Plugin ABI
 
-Decoders must implement the ABI defined in:
+Decoder plugins must follow the ABI defined in: 
 
-```
-include/decoder.h
-```
+```include/kafkax/decoder.h```
 
-Minimal decoder example:
+That header is the single source of truth for:
 
-```c
-#include "decoder.h"
+- ABI versioning
+- Required exported symbols
+- Input/output buffer contract
+- Error handling semantics
 
-int kafkax_decoder_abi_version() {
-    return KAFKAX_DECODER_ABI_VERSION;
-}
+The README does **not** duplicate ABI rules.  
+Always consult the header file.
 
-int my_decode(
-    const rd_kafka_message_t* msg,
-    kafkax_decode_result_t* out
-) {
-    out->kind = 0;
-    out->err_msg[0] = '\0';
-    out->bytes = (const uint8_t*)msg->payload;
-    out->len = msg->len;
-    return 0;
-}
-```
+## Current Status
 
-Usage:
+- Basic Kafka consume loop
+- Decoder plugin loading
+- q IPC table encoder (qipc)
+- Internal buffering and dispatch
 
-```c
-kafkax_subscribe_with_decoder(
-    "marketdata.custom",
-    "/path/to/libmydecoder.so",
-    "my_decode"
-);
-```
+This is a pilot-stage release intended for integration testing.
 
 ---
 
-## Decoder Contract (Summary)
+# Roadmap
 
-- C ABI, versioned
-- Loaded via `dlopen` / `dlsym`
-- Input: immutable `rd_kafka_message_t`
-- Output: decoded payload or error
-- All decoders (including built-in) follow the same contract
+## 1. Kafka Observability (C Layer)
+
+Add native support for:
+
+- `stats_cb`
+- `error_cb`
+
+Goals:
+
+- Expose Kafka runtime metrics
+- Adapt `stats_cb` output to Prometheus format
+- Provide stable metrics surface for monitoring
+- Improve production observability
 
 ---
 
-## License
+## 2. Performance Optimization
+
+Primary focus:
+
+- Optimize qipc encoding path
+- Reduce dynamic allocations
+- Minimize memory copies
+- Improve large payload throughput
+
+Planned direction (high-level):
+
+- Writer-based encoding model
+- Encode-into-buffer API (eliminate intermediate vectors)
+- Further reduction of allocator pressure
+
+---
+
+## 3. API Stabilization
+
+- Harden decoder ABI boundary
+- Improve error propagation model
+- Clarify pause/resume semantics
+- Introduce operational controls (pause/drain/seek)
+
+---
+
+# Versioning
+
+`v1.0.0` is a pilot test release.
+
+The ABI and performance model may evolve in future major versions.
+
+# License
 
 Apache License 2.0.
 

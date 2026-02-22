@@ -23,6 +23,7 @@ add_library(kafkax::abi ALIAS kafkax_abi)
 add_library(kafkax_core STATIC
         src/kafkax/core.cpp
         src/kafkax/decoder_registry.cpp
+        src/kafkax/default_decoder.cpp
 )
 target_include_directories(kafkax_core
         PUBLIC
@@ -61,9 +62,6 @@ target_include_directories(kafkax_qipc PUBLIC
 )
 target_link_libraries(kafkax_qipc PUBLIC kafkax::abi)
 add_library(kafkax::qipc ALIAS kafkax_qipc)
-
-# Plugins
-add_subdirectory(plugins/default_decoder)
 
 # demos
 if(KAFKAX_BUILD_EXAMPLES)

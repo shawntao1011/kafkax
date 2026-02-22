@@ -19,12 +19,12 @@
   } each t;
  }
 
+\
 / start
 cfg:(`bootstrap.servers`group.id`auto.offset.reset`enable.auto.commit`decode_threads`raw_queue_size`evt_queue_size)!
-     ("192.168.2.209:9092";"q-sub-demo";"earliest";1;4;8192;8192);
+     ("127.0.0.1:9092";"q_sub_demo";"earliest";1;4;32768;32768);
 
 h:.kfkx.consumer cfg;
 
-.kfkx.bind[h; `futu.orderbook.pb; "plugins/libkafkax_default_decoder.so"; `kafkax_default_decode];
-
-.kfkx.sub[h; `futu.orderbook.pb];
+.kfkx.sub[h; `kafkax.topic.demo];
+/
