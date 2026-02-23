@@ -1,4 +1,4 @@
-#include "../../include/kafkax/core/decoder_registry.hpp"
+#include "kafkax/core/decoder_registry.hpp"
 #include <dlfcn.h>
 
 namespace kafkax {

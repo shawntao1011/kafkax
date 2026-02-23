@@ -5,7 +5,7 @@
 #include <vector>
 #include <chrono>
 
-#include "types.hpp"
+#include "kafkax/qipc/types.hpp"
 
 namespace kafkax::qipc {
 

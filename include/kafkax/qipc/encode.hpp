@@ -4,8 +4,8 @@
 #include <vector>
 #include <string_view>
 
-#include "writer.hpp"
-#include "reflect.hpp"
+#include "kafkax/qipc/writer.hpp"
+#include "kafkax/qipc/reflect.hpp"
 
 namespace kafkax::qipc {
 

@@ -4,7 +4,7 @@
 #include <chrono>
 #include <cstdint>
 
-#include "types.hpp"
+#include "kafkax/qipc/types.hpp"
 
 namespace kafkax::qipc {
 

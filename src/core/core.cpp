@@ -1,4 +1,4 @@
-#include "../../include/kafkax/core/core.hpp"
+#include "kafkax/core/core.hpp"
 #include <sys/eventfd.h>
 #include <unistd.h>
 #include <errno.h>
