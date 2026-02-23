@@ -21,9 +21,9 @@ target_include_directories(kafkax_abi INTERFACE
 add_library(kafkax::abi ALIAS kafkax_abi)
 
 add_library(kafkax_core STATIC
-        src/kafkax/core.cpp
-        src/kafkax/decoder_registry.cpp
-        src/kafkax/default_decoder.cpp
+        src/core/core.cpp
+        src/core/decoder_registry.cpp
+        src/core/default_decoder.cpp
 )
 target_include_directories(kafkax_core
         PUBLIC
