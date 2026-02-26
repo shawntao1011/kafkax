@@ -2,7 +2,6 @@
 // Build: g++ -O2 -std=c++20 basicqot_example.cpp -I../include -L../build -lkafkax_qipc
 #include <array>
 #include <vector>
-#include <chrono>
 #include <iostream>
 
 #include "kafkax/qipc/encode.hpp"   // C++ API
@@ -22,7 +21,7 @@ static std::string to_hex_0x(const std::vector<std::uint8_t>& bytes) {
 
 struct BasicQuoteRow {
   std::string sym; // "HK.00700"
-  std::chrono::system_clock::time_point time;
+    std::int64_t time; // unix ns
   double cur{};
   std::int64_t volume{};
 };
@@ -35,15 +34,15 @@ static inline const std::array<kafkax::qipc::ColumnSpec<BasicQuoteRow>, 4> BASIC
 }};
 
 int main() {
-  std::vector<BasicQuoteRow> rows;
-  rows.push_back({"HK.00700", std::chrono::system_clock::now(), 300.5, 123456});
+    std::vector<BasicQuoteRow> rows;
+    rows.push_back({"HK.00700", 1735689600000000000LL, 300.5, 123456});
 
-  std::vector<std::uint8_t> kbytes =
-    kafkax::qipc::encode_table_ipc<BasicQuoteRow>(rows, BASICQOT_COLS);
+    std::vector<std::uint8_t> kbytes =
+        kafkax::qipc::encode_table_ipc<BasicQuoteRow>(rows, BASICQOT_COLS);
 
-  // kbytes is a full q IPC message (8-byte header + payload).
-  // You can send it via kdb+ IPC, or wrap it into your pipeline.
-  std::cout << to_hex_0x(kbytes) << "\n";
+    // kbytes is a full q IPC message (8-byte header + payload).
+    // You can send it via kdb+ IPC, or wrap it into your pipeline.
+    std::cout << to_hex_0x(kbytes) << "\n";
 
-  return (kbytes.size() > 8) ? 0 : 1;
+    return (kbytes.size() > 8) ? 0 : 1;
 }

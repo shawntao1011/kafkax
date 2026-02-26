@@ -31,7 +31,7 @@ template <class Row>
 inline std::vector<std::uint8_t> encode_table_ipc(std::span<const Row> rows,
                                                   std::span<const ColumnSpec<Row>> cols)
 {
-    Builder b;
+    static thread_local Builder b;
 
     // Avoid allocating a separate vector<string_view> for names:
     // write the sym list directly from ColumnSpec.
@@ -64,7 +64,7 @@ inline std::vector<std::uint8_t> encode_table_ipc(std::span<const Row> rows,
             case QType::TimestampNs: {
                 emit_typed_list_hdr(b.buf, KP_TS, n);
                 const auto m = c.ts_member();
-                for (auto& r : rows) put_i64_le(b.buf, to_unix_ns(r.*m));
+                for (auto& r : rows) append_bytes(b.buf, &(r.*m), sizeof(r.*m));
                 break;
             }
             case QType::Float64: {

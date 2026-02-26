@@ -8,11 +8,11 @@
 
 namespace {
 
-static thread_local std::vector<std::uint8_t> tls_buf;
+    static thread_local kafkax::qipc::Builder tls_builder;
 
-inline const std::uint8_t* field_ptr(const void* row, std::uint32_t off) {
-    return static_cast<const std::uint8_t*>(row) + off;
-}
+    inline const std::uint8_t* field_ptr(const void* row, std::uint32_t off) {
+        return static_cast<const std::uint8_t*>(row) + off;
+    }
 
 } // namespace
 
@@ -33,7 +33,7 @@ int kafkax_qipc_encode_table_c(
 
     using namespace kafkax::qipc;
 
-    Builder b;
+    auto& b = tls_builder;
     // simple reserve hint
     b.begin_ipc(256 + (std::size_t)nrows * (std::size_t)ncols * 16);
 
@@ -103,8 +103,8 @@ int kafkax_qipc_encode_table_c(
         }
     }
 
-    tls_buf = b.to_bytes();
-    *out_bytes = tls_buf.data();
-    *out_len = (uint32_t)tls_buf.size();
+    b.finalize_ipc_header();
+    *out_bytes = b.buf.data();
+    *out_len = (uint32_t)b.buf.size();
     return 0;
 }

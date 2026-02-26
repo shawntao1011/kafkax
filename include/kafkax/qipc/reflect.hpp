@@ -10,22 +10,22 @@ namespace kafkax::qipc {
 
 template <class Row>
 struct ColumnSpec {
-    using SymMember  = std::string Row::*;
-    using TsMember   = std::chrono::system_clock::time_point Row::*;
-    using F64Member  = double Row::*;
-    using I64Member  = std::int64_t Row::*;
-    using I32Member  = std::int32_t Row::*;
+    struct SymMember { std::string Row::* ptr; };
+    struct TsMember  { std::int64_t Row::* ptr; };
+    struct F64Member { double Row::* ptr; };
+    struct I64Member { std::int64_t Row::* ptr; };
+    struct I32Member { std::int32_t Row::* ptr; };
 
     const char* name;
     QType type;
 
     std::variant<SymMember, TsMember, F64Member, I64Member, I32Member> member;
 
-    SymMember sym_member() const { return std::get<SymMember>(member); }
-    TsMember  ts_member()  const { return std::get<TsMember>(member); }
-    F64Member f64_member() const { return std::get<F64Member>(member); }
-    I64Member i64_member() const { return std::get<I64Member>(member); }
-    I32Member i32_member() const { return std::get<I32Member>(member); }
+    auto sym_member() const { return std::get<SymMember>(member).ptr; }
+    auto ts_member()  const { return std::get<TsMember>(member).ptr; }
+    auto f64_member() const { return std::get<F64Member>(member).ptr; }
+    auto i64_member() const { return std::get<I64Member>(member).ptr; }
+    auto i32_member() const { return std::get<I32Member>(member).ptr; }
 };
 
 // Macro helpers

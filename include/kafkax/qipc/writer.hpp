@@ -12,12 +12,12 @@ namespace kafkax::qipc {
 // -----------------------------
 // Fast little-endian appends
 // -----------------------------
-// Uses resize + memcpy to avoid per-byte push_back overhead.
+// Appends a raw byte span in a single insert call.
 
 inline void append_bytes(std::vector<std::uint8_t>& b, const void* p, std::size_t n) {
-    const auto old = b.size();
-    b.resize(old + n);
-    std::memcpy(b.data() + old, p, n);
+    b.insert(b.end(),
+             static_cast<const std::uint8_t*>(p),
+             static_cast<const std::uint8_t*>(p) + n);
 }
 
 inline void put_u8(std::vector<std::uint8_t>& b, std::uint8_t v) {
@@ -25,19 +25,11 @@ inline void put_u8(std::vector<std::uint8_t>& b, std::uint8_t v) {
 }
 
 inline void put_u32_le(std::vector<std::uint8_t>& b, std::uint32_t v) {
-    std::uint8_t tmp[4] = {
-        std::uint8_t(v & 0xFF),
-        std::uint8_t((v >> 8) & 0xFF),
-        std::uint8_t((v >> 16) & 0xFF),
-        std::uint8_t((v >> 24) & 0xFF)
-    };
-    append_bytes(b, tmp, 4);
+    append_bytes(b, &v, sizeof(v));
 }
 
 inline void put_u64_le(std::vector<std::uint8_t>& b, std::uint64_t v) {
-    std::uint8_t tmp[8];
-    for (int i = 0; i < 8; ++i) tmp[i] = std::uint8_t((v >> (8 * i)) & 0xFF);
-    append_bytes(b, tmp, 8);
+    append_bytes(b, &v, sizeof(v));
 }
 
 inline void put_i32_le(std::vector<std::uint8_t>& b, std::int32_t v) {
@@ -50,20 +42,12 @@ inline void put_i64_le(std::vector<std::uint8_t>& b, std::int64_t v) {
 
 inline void put_f64_le(std::vector<std::uint8_t>& b, double d) {
     static_assert(sizeof(double) == 8, "double must be 8 bytes");
-    std::uint64_t u = 0;
-    std::memcpy(&u, &d, 8);
-    put_u64_le(b, u);
+    append_bytes(b, &d, sizeof(d));
 }
 
 inline void put_cstr(std::vector<std::uint8_t>& b, std::string_view s) {
     append_bytes(b, s.data(), s.size());
     put_u8(b, 0); // NUL
-}
-
-// IPC uses unix-epoch nanoseconds for timestamp atoms/lists
-inline std::int64_t to_unix_ns(std::chrono::system_clock::time_point tp) {
-    using namespace std::chrono;
-    return duration_cast<nanoseconds>(tp.time_since_epoch()).count();
 }
 
 // -----------------------------
