@@ -13,7 +13,7 @@
 #include <unistd.h>
 #include <errno.h>
 
-#include "kafkax/core/core.hpp"
+#include "kafkax/core.hpp"
 
 namespace {
 

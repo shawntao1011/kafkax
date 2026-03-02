@@ -1,8 +1,9 @@
-#include "kafkax/core/core.hpp"
 #include <sys/eventfd.h>
 #include <unistd.h>
 #include <errno.h>
 #include <cstring>
+
+#include "kafkax/core.hpp"
 
 namespace kafkax {
     inline const char* bool_to_str(bool b) {

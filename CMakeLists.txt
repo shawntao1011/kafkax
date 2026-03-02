@@ -21,9 +21,9 @@ target_include_directories(kafkax_abi INTERFACE
 add_library(kafkax::abi ALIAS kafkax_abi)
 
 add_library(kafkax_core STATIC
-        src/core/core.cpp
-        src/core/decoder_registry.cpp
-        src/core/default_decoder.cpp
+        src/core.cpp
+        src/decoder_registry.cpp
+        src/default_decoder.cpp
 )
 target_include_directories(kafkax_core
         PUBLIC
@@ -52,17 +52,6 @@ target_include_directories(kafkax_q PRIVATE
     )
 target_link_libraries(kafkax_q PRIVATE kafkax_core)
 
-
-add_library(kafkax_qipc STATIC
-        src/qipc/qipc_c.cpp
-)
-target_include_directories(kafkax_qipc PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
-)
-target_link_libraries(kafkax_qipc PUBLIC kafkax::abi)
-add_library(kafkax::qipc ALIAS kafkax_qipc)
-
 # demos
 if(KAFKAX_BUILD_EXAMPLES)
     add_subdirectory(examples)
@@ -72,7 +61,6 @@ install(DIRECTORY include/ DESTINATION include)
 
 install(TARGETS
         kafkax_abi
-        kafkax_qipc
         kafkax_core
         EXPORT kafkaxTargets
 )
